@@ -1,0 +1,1028 @@
+# Databricks notebook source
+# MAGIC %md
+# MAGIC # Custom Tools & Advanced Patterns
+# MAGIC
+# MAGIC ## Two Learning Paths
+# MAGIC
+# MAGIC **🎓 Path A: Quick Start (30 min)**
+# MAGIC - Section 1: When to Build Custom Tools (5 min)
+# MAGIC - Section 2: Simple Custom Tool (10 min)
+# MAGIC - Section 5: Deploy to Production (15 min)
+# MAGIC - Skip Sections 3-4 for now
+# MAGIC
+# MAGIC **🔬 Path B: Deep Dive (50 min)**
+# MAGIC - All sections: Complete understanding
+# MAGIC - Section 3: MCP Server Concepts (10 min)
+# MAGIC - Section 4: Local MCP Server Testing (10 min)
+# MAGIC - Section 5: Deploy to Production (15 min)
+# MAGIC
+# MAGIC ## What You'll Build
+# MAGIC Learn how to build custom MCP tools and deploy them to production as Databricks Apps.
+# MAGIC
+# MAGIC ## Prerequisites
+# MAGIC - Completed [01_genie_integration.py](01_genie_integration.py)
+# MAGIC - Understanding of LangChain tools and agents
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Step 1: Install Dependencies
+
+# COMMAND ----------
+
+%pip install -q --upgrade mlflow[databricks]>=3.1.0 databricks-sdk databricks-langchain[memory]>=0.8.0 databricks-vectorsearch>=0.30 langgraph>=0.2.50 langchain-core>=0.3.0
+
+# COMMAND ----------
+
+dbutils.library.restartPython()
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Section 1: When to Build Custom Tools (5 min)
+# MAGIC
+# MAGIC ### Use Managed MCPs When:
+# MAGIC - ✅ Querying Databricks tables (SQL, Genie)
+# MAGIC - ✅ Calling Unity Catalog Functions
+# MAGIC - ✅ Standard Databricks operations
+# MAGIC - ✅ You want zero setup and production-ready tools
+# MAGIC
+# MAGIC ### Build Custom Tools When:
+# MAGIC - 🔧 Wrapping external APIs (weather, stock prices, news)
+# MAGIC - 🔧 Custom business logic not in UC Functions
+# MAGIC - 🔧 Third-party integrations (Slack, Salesforce, GitHub)
+# MAGIC - 🔧 Rate limiting or caching layer needed
+# MAGIC - 🔧 Legacy system integration
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Decision Tree
+# MAGIC
+# MAGIC **Question: Where does the data/capability live?**
+# MAGIC
+# MAGIC ```
+# MAGIC ├─ In Databricks
+# MAGIC │   └─> Use Managed MCP (SQL, Genie, UC Functions)
+# MAGIC │
+# MAGIC ├─ External API/Service
+# MAGIC │   └─> Build Custom Tool
+# MAGIC │
+# MAGIC └─ Complex multi-step logic
+# MAGIC     └─> Consider UC Function OR Custom MCP Server
+# MAGIC ```
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Section 2: Build a Simple Custom Tool (10 min)
+# MAGIC
+# MAGIC Let's build a simple tool that wraps an external weather API.
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Example: Weather API Tool
+# MAGIC
+# MAGIC This tool will:
+# MAGIC - Call a free weather API
+# MAGIC - Return current weather for a city
+# MAGIC - Be usable by our agent
+
+# COMMAND ----------
+
+from langchain_core.tools import tool
+import requests
+
+@tool
+def get_weather(city: str) -> str:
+    """
+    Get current weather conditions for a city.
+
+    Use this when users ask about:
+    - Current weather
+    - Temperature
+    - Weather conditions
+    - Whether to plan outdoor activities
+
+    Args:
+        city: City name (e.g., "San Francisco", "New York")
+    """
+    try:
+        # Using wttr.in free weather API
+        response = requests.get(
+            f"https://wttr.in/{city}?format=j1",
+            timeout=5
+        )
+
+        if response.status_code == 200:
+            data = response.json()
+            current = data['current_condition'][0]
+            temp_c = current['temp_C']
+            description = current['weatherDesc'][0]['value']
+            humidity = current['humidity']
+
+            return f"Weather in {city}: {description}, {temp_c}°C, {humidity}% humidity"
+        else:
+            return f"Could not fetch weather for {city}. Status: {response.status_code}"
+
+    except requests.exceptions.Timeout:
+        return f"Weather API timed out for {city}"
+    except Exception as e:
+        return f"Error getting weather: {str(e)}"
+
+print("✅ Weather tool created!")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Test the Custom Tool
+# MAGIC
+# MAGIC Let's test the weather tool directly before adding it to an agent.
+
+# COMMAND ----------
+
+# Test the tool directly
+test_result = get_weather.invoke({"city": "San Francisco"})
+print("Test: get_weather('San Francisco')")
+print(test_result)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Add Custom Tool to Agent
+# MAGIC
+# MAGIC Now let's add this to an agent:
+
+# COMMAND ----------
+
+from databricks_langchain import ChatDatabricks
+from langchain_core.messages import HumanMessage
+from langgraph.graph import StateGraph, MessagesState, END
+from langgraph.prebuilt import ToolNode
+
+# Configuration
+LLM_ENDPOINT = "databricks-claude-sonnet-4-5"
+
+# Initialize LLM
+llm = ChatDatabricks(endpoint=LLM_ENDPOINT, temperature=0.1)
+
+# Collect tools
+tools = [
+    get_weather  # Our custom tool!
+]
+
+# Bind tools to LLM
+llm_with_tools = llm.bind_tools(tools)
+
+# Build simple agent
+def call_model(state: MessagesState):
+    response = llm_with_tools.invoke(state["messages"])
+    return {"messages": [response]}
+
+def should_continue(state: MessagesState) -> str:
+    last_message = state["messages"][-1]
+    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+        return "tools"
+    return "end"
+
+workflow = StateGraph(MessagesState)
+workflow.add_node("agent", call_model)
+workflow.add_node("tools", ToolNode(tools))
+workflow.set_entry_point("agent")
+workflow.add_conditional_edges("agent", should_continue, {"tools": "tools", "end": END})
+workflow.add_edge("tools", "agent")
+
+agent = workflow.compile()
+
+print("✅ Agent created with custom weather tool!")
+
+# COMMAND ----------
+
+# Test agent with weather question
+result = agent.invoke({
+    "messages": [HumanMessage(content="What's the weather like in Seattle?")]
+})
+
+print("Question: What's the weather like in Seattle?")
+print(f"Answer: {result['messages'][-1].content}")
+print()
+print("✅ Agent successfully used the custom tool!")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Storing API Keys Securely
+# MAGIC
+# MAGIC **Best Practice**: Use Databricks Secrets for API keys
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC **Best Practice Steps:**
+# MAGIC
+# MAGIC 1. **Create a secret scope** (run once):
+# MAGIC    ```python
+# MAGIC    dbutils.secrets.createScope("api_keys")
+# MAGIC    ```
+# MAGIC
+# MAGIC 2. **Store your API key** (run once):
+# MAGIC    ```python
+# MAGIC    dbutils.secrets.put("api_keys", "openweather_api_key", "your-api-key-here")
+# MAGIC    ```
+# MAGIC
+# MAGIC 3. **Access in your tool**:
+# MAGIC    ```python
+# MAGIC    api_key = dbutils.secrets.get("api_keys", "openweather_api_key")
+# MAGIC    ```
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ---
+# MAGIC
+# MAGIC ## 🎓 Quick Start Path: Jump to Section 5 Now!
+# MAGIC
+# MAGIC **If you're following the Quick Start path (Path A), skip to [Section 5: Deploy to Production](#Section-5:-Deploy-MCP-Server-to-Production-(15-min))** ⬇️
+# MAGIC
+# MAGIC **For Deep Dive path (Path B), continue below** ⬇️
+# MAGIC
+# MAGIC ---
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Section 3: MCP Server Concepts (OPTIONAL - 10 min)
+# MAGIC
+# MAGIC **⏭️ Skip this section if you want to go straight to production deployment (Section 5).**
+# MAGIC
+# MAGIC This section explains MCP server architecture for deeper understanding.
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### When You Need a Full MCP Server:
+# MAGIC
+# MAGIC - Multiple related tools (e.g., math operations: add, subtract, multiply)
+# MAGIC - Complex state management
+# MAGIC - Need stdio or HTTP transport
+# MAGIC - Want to reuse across multiple agents/projects
+# MAGIC - Need fine-grained control over tool lifecycle
+# MAGIC
+# MAGIC ### MCP Server Architecture
+# MAGIC
+# MAGIC ```
+# MAGIC ┌──────────────────┐
+# MAGIC │   Agent/Client   │
+# MAGIC └────────┬─────────┘
+# MAGIC          │
+# MAGIC      MCP Protocol
+# MAGIC      (stdio/HTTP)
+# MAGIC          │
+# MAGIC ┌────────▼─────────┐
+# MAGIC │   MCP Server     │
+# MAGIC │  (Your Code)     │
+# MAGIC ├──────────────────┤
+# MAGIC │ @app.list_tools()│
+# MAGIC │ @app.call_tool() │
+# MAGIC └────────┬─────────┘
+# MAGIC          │
+# MAGIC    External APIs
+# MAGIC    or Business Logic
+# MAGIC ```
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Section 4: Local MCP Server Testing (OPTIONAL - 10 min)
+# MAGIC
+# MAGIC **⏭️ Skip this section for Quick Start path.**
+# MAGIC
+# MAGIC ### Example: Calculator MCP Server
+# MAGIC
+# MAGIC Let's build a simple calculator MCP server with multiple math operations:
+
+# COMMAND ----------
+
+# MAGIC %pip install -q mcp
+
+# COMMAND ----------
+
+dbutils.library.restartPython()
+
+# COMMAND ----------
+
+from mcp.server import Server
+from mcp.server.stdio import stdio_server
+from mcp.types import Tool, TextContent
+
+# Create MCP server
+app = Server("calculator-mcp")
+
+@app.list_tools()
+async def list_tools() -> list[Tool]:
+    """Define all tools this MCP server provides."""
+    return [
+        Tool(
+            name="add",
+            description="Add two numbers together",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "a": {
+                        "type": "number",
+                        "description": "First number"
+                    },
+                    "b": {
+                        "type": "number",
+                        "description": "Second number"
+                    }
+                },
+                "required": ["a", "b"]
+            }
+        ),
+        Tool(
+            name="multiply",
+            description="Multiply two numbers",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "a": {
+                        "type": "number",
+                        "description": "First number"
+                    },
+                    "b": {
+                        "type": "number",
+                        "description": "Second number"
+                    }
+                },
+                "required": ["a", "b"]
+            }
+        ),
+        Tool(
+            name="power",
+            description="Raise a number to a power",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "base": {
+                        "type": "number",
+                        "description": "Base number"
+                    },
+                    "exponent": {
+                        "type": "number",
+                        "description": "Exponent"
+                    }
+                },
+                "required": ["base", "exponent"]
+            }
+        )
+    ]
+
+@app.call_tool()
+async def call_tool(name: str, arguments: dict) -> list[TextContent]:
+    """Handle tool invocations."""
+    if name == "add":
+        result = arguments["a"] + arguments["b"]
+        return [TextContent(
+            type="text",
+            text=f"{arguments['a']} + {arguments['b']} = {result}"
+        )]
+
+    elif name == "multiply":
+        result = arguments["a"] * arguments["b"]
+        return [TextContent(
+            type="text",
+            text=f"{arguments['a']} × {arguments['b']} = {result}"
+        )]
+
+    elif name == "power":
+        result = arguments["base"] ** arguments["exponent"]
+        return [TextContent(
+            type="text",
+            text=f"{arguments['base']}^{arguments['exponent']} = {result}"
+        )]
+
+    else:
+        return [TextContent(
+            type="text",
+            text=f"Unknown tool: {name}"
+        )]
+
+# Entry point for running as a standalone server
+if __name__ == "__main__":
+    stdio_server(app)
+
+print("✅ Calculator MCP server defined!")
+print()
+print("Server provides 3 tools:")
+print("  - add: Add two numbers")
+print("  - multiply: Multiply two numbers")
+print("  - power: Raise to a power")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ---
+# MAGIC
+# MAGIC ## Section 5: Deploy MCP Server to Production (15 min)
+# MAGIC
+# MAGIC ### 🎯 Start Here if You Skipped Sections 3-4
+# MAGIC
+# MAGIC This section shows you how to deploy a production-ready MCP server as a Databricks App.
+# MAGIC We'll take the weather tool from Section 2 and deploy it.
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Architecture: Local Development vs Production
+# MAGIC
+# MAGIC **What you built in Section 2:**
+# MAGIC ```python
+# MAGIC @tool
+# MAGIC def get_weather(city: str) -> str:
+# MAGIC     # Your tool code
+# MAGIC ```
+# MAGIC
+# MAGIC **What we're deploying now:**
+# MAGIC
+# MAGIC Following the [official Databricks MCP app template](https://github.com/databricks/app-templates/tree/main/mcp-server-hello-world):
+# MAGIC ```
+# MAGIC my-weather-mcp-server/
+# MAGIC ├── requirements.txt          ← just "uv" (the package manager)
+# MAGIC ├── pyproject.toml            ← project deps (fastmcp, fastapi, uvicorn)
+# MAGIC ├── app.yaml                  ← command: uv run weather-mcp-server
+# MAGIC └── server/
+# MAGIC     ├── tools.py              ← ★ your tool logic (add tools here!)
+# MAGIC     ├── app.py                ← FastMCP + FastAPI setup
+# MAGIC     └── main.py               ← uvicorn entrypoint
+# MAGIC ```
+# MAGIC
+# MAGIC | Aspect | Local (Sections 1-2) | Production (This Section) |
+# MAGIC |--------|---------------------|---------------------------|
+# MAGIC | Transport | N/A | HTTP (streamable) |
+# MAGIC | Framework | `@tool` | FastMCP + FastAPI |
+# MAGIC | Package Manager | pip | uv (fast, reliable) |
+# MAGIC | Access | Single notebook | Multi-user, authenticated |
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Step 5.1: Create Project Structure
+
+# COMMAND ----------
+
+import os
+import shutil
+
+# Choose a name for your MCP server
+PROJECT_NAME = "my-weather-mcp-server"
+username = dbutils.notebook.entry_point.getDbutils().notebook().getContext().userName().get()
+PROJECT_DIR = f"/Workspace/Users/{username}/{PROJECT_NAME}"
+
+# Clean slate — remove the entire project directory and recreate it.
+# This prevents stale artifacts (.venv, pyproject.toml, requirements.txt, etc.)
+# from interfering with the Databricks Apps builder.
+if os.path.exists(PROJECT_DIR):
+    shutil.rmtree(PROJECT_DIR)
+    print(f"🧹 Cleaned previous project directory")
+
+os.makedirs(f"{PROJECT_DIR}/server", exist_ok=True)
+print(f"✅ Created project at: {PROJECT_DIR}")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Step 5.2: Configuration Files
+# MAGIC
+# MAGIC These files tell Databricks Apps how to run your server.
+# MAGIC
+# MAGIC **How Databricks Apps works:**
+# MAGIC - The runtime is Python 3.11 in a dedicated virtual environment
+# MAGIC - If `requirements.txt` exists, `pip install -r requirements.txt` runs at build time
+# MAGIC - Many packages are pre-installed (fastapi, uvicorn, requests, databricks-sdk)
+# MAGIC - The `app.yaml` command runs directly in this environment
+# MAGIC
+# MAGIC See: [Databricks Apps system environment](https://docs.databricks.com/aws/en/dev-tools/databricks-apps/system-env)
+# MAGIC
+# MAGIC **How this works (same as [official template](https://github.com/databricks/app-templates/tree/main/mcp-server-hello-world)):**
+# MAGIC - `requirements.txt` contains only `uv` — the builder pip-installs it at build time
+# MAGIC - `app.yaml` runs `uv run weather-mcp-server` — uv reads `pyproject.toml` and
+# MAGIC   installs the real dependencies (fastmcp, fastapi, uvicorn) automatically
+# MAGIC - To add tools, just edit `server/tools.py` — same `@mcp_server.tool` pattern
+
+# COMMAND ----------
+
+# requirements.txt — only contains "uv" (the package manager).
+# The builder pip-installs uv, then app.yaml uses uv to install everything else.
+with open(f"{PROJECT_DIR}/requirements.txt", "w") as f:
+    f.write("uv\n")
+
+# app.yaml — tells Databricks Apps how to start the server.
+# "uv run" reads pyproject.toml, installs deps, and runs the entry point.
+with open(f"{PROJECT_DIR}/app.yaml", "w") as f:
+    f.write('command: ["uv", "run", "weather-mcp-server"]\n')
+
+# pyproject.toml — project metadata and dependencies.
+# uv reads this to know what to install and what command to run.
+with open(f"{PROJECT_DIR}/pyproject.toml", "w") as f:
+    f.write("""\
+[project]
+name = "weather-mcp-server"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "fastmcp>=2.12.5",
+    "fastapi>=0.115.12",
+    "uvicorn>=0.34.2",
+    "requests",
+]
+
+[project.scripts]
+weather-mcp-server = "server.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["server"]
+""")
+
+print("✅ Created requirements.txt, app.yaml, pyproject.toml")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Step 5.3: Server Implementation
+# MAGIC
+# MAGIC Three files, same layout as the
+# MAGIC [official Databricks MCP template](https://github.com/databricks/app-templates/tree/main/mcp-server-hello-world):
+# MAGIC
+# MAGIC | File | Role |
+# MAGIC |------|------|
+# MAGIC | `server/tools.py` | **Add your tools here** — use `@mcp_server.tool` decorator |
+# MAGIC | `server/app.py` | FastMCP + FastAPI setup (boilerplate, rarely edit) |
+# MAGIC | `server/main.py` | Uvicorn entrypoint (boilerplate, rarely edit) |
+
+# COMMAND ----------
+
+# ── server/__init__.py ──
+with open(f"{PROJECT_DIR}/server/__init__.py", "w") as f:
+    f.write("")
+
+# ── server/tools.py ── (★ This is the file you edit to add tools)
+with open(f"{PROJECT_DIR}/server/tools.py", "w") as f:
+    f.write('''\
+"""MCP tool definitions — add your tools here."""
+import requests
+
+
+def load_tools(mcp_server):
+    """Register all tools with the MCP server."""
+
+    @mcp_server.tool
+    def get_weather(city: str) -> str:
+        """
+        Get current weather conditions for a city.
+
+        Args:
+            city: City name (e.g., "San Francisco", "New York")
+        """
+        try:
+            resp = requests.get(f"https://wttr.in/{city}?format=j1", timeout=5)
+            if resp.status_code == 200:
+                cur = resp.json()["current_condition"][0]
+                desc = cur["weatherDesc"][0]["value"]
+                return f"Weather in {city}: {desc}, {cur['temp_C']}C, {cur['humidity']}% humidity"
+            return f"Could not fetch weather for {city}"
+        except Exception as e:
+            return f"Error: {e}"
+''')
+
+# ── server/app.py ── (FastMCP + FastAPI setup — rarely needs editing)
+with open(f"{PROJECT_DIR}/server/app.py", "w") as f:
+    f.write('''\
+"""FastMCP server setup — follows the official Databricks app template."""
+from fastmcp import FastMCP
+from fastapi import FastAPI
+from .tools import load_tools
+
+mcp_server = FastMCP(name="weather-mcp-server")
+load_tools(mcp_server)
+mcp_app = mcp_server.http_app()
+
+app = FastAPI()
+
+@app.get("/")
+async def root():
+    return {"status": "healthy"}
+
+combined_app = FastAPI(
+    routes=[*mcp_app.routes, *app.routes],
+    lifespan=mcp_app.lifespan,
+)
+''')
+
+# ── server/main.py ── (Uvicorn entrypoint — rarely needs editing)
+with open(f"{PROJECT_DIR}/server/main.py", "w") as f:
+    f.write('''\
+"""Entry point for the MCP server."""
+import os
+import uvicorn
+
+def main():
+    port = int(os.environ.get("DATABRICKS_APP_PORT", os.environ.get("PORT", 8000)))
+    uvicorn.run("server.app:combined_app", host="0.0.0.0", port=port)
+''')
+
+print("✅ Created server files")
+print(f"\n📂 {PROJECT_NAME}/")
+print(f"   ├── requirements.txt   # just 'uv'")
+print(f"   ├── pyproject.toml     # deps: fastmcp, fastapi, uvicorn")
+print(f"   ├── app.yaml           # uv run weather-mcp-server")
+print(f"   └── server/")
+print(f"       ├── tools.py       ← ★ add your tools here")
+print(f"       ├── app.py         ← FastMCP + FastAPI setup")
+print(f"       └── main.py        ← uvicorn entrypoint")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Step 5.4: Verify Files Before Deploy
+
+# COMMAND ----------
+
+import os
+
+files_to_check = [
+    f"{PROJECT_DIR}/requirements.txt",
+    f"{PROJECT_DIR}/pyproject.toml",
+    f"{PROJECT_DIR}/app.yaml",
+    f"{PROJECT_DIR}/server/__init__.py",
+    f"{PROJECT_DIR}/server/tools.py",
+    f"{PROJECT_DIR}/server/app.py",
+    f"{PROJECT_DIR}/server/main.py",
+]
+
+print("Project files:")
+for fp in files_to_check:
+    status = "✅" if os.path.exists(fp) else "❌ MISSING"
+    print(f"  {status}: {fp.split(PROJECT_NAME + '/')[-1]}")
+
+# Warn about stale artifacts that break the builder
+for stale in [".venv", "__pycache__", "uv.lock"]:
+    if os.path.exists(os.path.join(PROJECT_DIR, stale)):
+        print(f"  ⚠️  STALE: {stale} — re-run Step 5.1 to clean up")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Step 5.5: Deploy Using Databricks SDK
+# MAGIC
+# MAGIC Deploy the app using the Databricks Python SDK:
+
+# COMMAND ----------
+
+print(f"📁 Project Directory: {PROJECT_DIR}")
+print(f"📝 App Name: {PROJECT_NAME}")
+
+# Remove stale build artifacts that can interfere with fresh deployments.
+import os, shutil
+for stale in [".venv", "__pycache__", "uv.lock"]:
+    p = os.path.join(PROJECT_DIR, stale)
+    if os.path.isdir(p):  shutil.rmtree(p); print(f"🧹 Removed {stale}")
+    elif os.path.isfile(p): os.remove(p); print(f"🧹 Removed {stale}")
+
+from databricks.sdk import WorkspaceClient
+from databricks.sdk.service.apps import App, AppDeployment
+
+w = WorkspaceClient()
+
+# Create app
+try:
+    print(f"\n🚀 Attempting to create app '{PROJECT_NAME}'...")
+    app = w.apps.create_and_wait(
+        app=App(
+            name=PROJECT_NAME,
+            description="Weather MCP Server from Custom Tools notebook"
+        )
+    )
+    print(f"✅ App created")
+except Exception as e:
+    if "already exists" in str(e).lower():
+        print(f"ℹ️  App already exists (continuing...)")
+    else:
+        print(f"❌ Error creating app: {e}")
+        raise
+
+# Deploy app
+try:
+    print(f"\n📦 Deploying from {PROJECT_DIR}...")
+    deployment = w.apps.deploy(
+        app_name=PROJECT_NAME,
+        app_deployment=AppDeployment(
+            source_code_path=PROJECT_DIR
+        )
+    )
+    print(f"✅ Deployment started: {deployment.deployment_id}")
+    print(f"\n⏳ Monitor progress:")
+    print(f"   - Databricks UI > Apps > {PROJECT_NAME}")
+    print(f"   - Or check status in the next cell in ~2-3 minutes")
+except Exception as e:
+    print(f"\n❌ Deployment error: {e}")
+    raise
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Step 5.6: Check Deployment Status
+# MAGIC
+# MAGIC **⏳ Wait 2-3 minutes** for deployment to complete, then run this cell to check status:
+
+# COMMAND ----------
+
+from databricks.sdk import WorkspaceClient
+
+PROJECT_NAME = "my-weather-mcp-server"  # Must match above
+
+w = WorkspaceClient()
+app_info = w.apps.get(name=PROJECT_NAME)
+
+print(f"App Name: {app_info.name}")
+print(f"App URL: {app_info.url if hasattr(app_info, 'url') else 'Not yet available'}")
+
+# Check deployment status
+deployment_ready = False
+if hasattr(app_info, 'active_deployment') and app_info.active_deployment:
+    deployment = app_info.active_deployment
+
+    # Try different status paths (SDK version compatibility)
+    if hasattr(deployment, 'status') and deployment.status:
+        state = deployment.status.state if hasattr(deployment.status, 'state') else str(deployment.status)
+        print(f"Deployment Status: {state}")
+        deployment_ready = state in ["SUCCEEDED", "RUNNING"]
+    elif hasattr(deployment, 'deployment_status'):
+        state = deployment.deployment_status.state
+        print(f"Deployment Status: {state}")
+        deployment_ready = state in ["SUCCEEDED", "RUNNING"]
+    else:
+        print(f"Deployment found but status format unknown")
+        # If we have a URL, assume it's ready
+        deployment_ready = hasattr(app_info, 'url') and app_info.url is not None
+
+# Check compute/app status
+if hasattr(app_info, 'compute_status') and app_info.compute_status:
+    compute_state = app_info.compute_status.state if hasattr(app_info.compute_status, 'state') else str(app_info.compute_status)
+    print(f"Compute Status: {compute_state}")
+
+if deployment_ready and app_info.url:
+    print("\n✅ App is ready! Proceed to the next cell to connect.")
+    print(f"   MCP Endpoint will be: {app_info.url}/mcp")
+elif app_info.url:
+    print("\n⚠️ App URL exists but deployment status unclear. Try connecting anyway in the next cell.")
+else:
+    print("\n⏳ App is still deploying. Wait 1-2 minutes and re-run this cell.")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Step 5.7: Connect to Your Deployed Server
+# MAGIC
+# MAGIC Once deployment shows **SUCCEEDED** above, we can connect to our MCP server using the
+# MAGIC `DatabricksMCPClient`. But first, we need to understand **authentication**.
+# MAGIC
+# MAGIC ---
+# MAGIC
+# MAGIC #### 🔐 Why OAuth Is Required
+# MAGIC
+# MAGIC Databricks Apps sit behind a **secure proxy** that enforces **OAuth** authentication.
+# MAGIC This is different from how most Databricks SDK calls work inside a notebook:
+# MAGIC
+# MAGIC | Context | Auth Method | Works with MCP Apps? |
+# MAGIC |---|---|---|
+# MAGIC | Notebook default (`WorkspaceClient()`) | Session token (PAT-like) | ❌ No |
+# MAGIC | Local CLI (`databricks auth login`) | OAuth U2M (user-to-machine) | ✅ Yes |
+# MAGIC | **Service Principal** (`client_id` + `client_secret`) | **OAuth M2M (machine-to-machine)** | **✅ Yes** |
+# MAGIC | Agent Serving (on-behalf-of-user) | OAuth via `ModelServingUserCredentials` | ✅ Yes |
+# MAGIC
+# MAGIC When you run `WorkspaceClient()` in a notebook, it uses the notebook's built-in session
+# MAGIC token — which is **not** an OAuth token. That's why connecting directly fails with:
+# MAGIC
+# MAGIC ```
+# MAGIC ValueError: OAuth authentication is required for MCP servers hosted on Databricks Apps.
+# MAGIC ```
+# MAGIC
+# MAGIC **The solution:** Create a **service principal** and use its OAuth credentials to authenticate.
+# MAGIC
+# MAGIC ---
+# MAGIC
+# MAGIC #### 🛠️ One-Time Setup: Create a Service Principal
+# MAGIC
+# MAGIC A **service principal** (SP) is a non-human identity that can authenticate to Databricks
+# MAGIC via OAuth. You (or your workspace admin) need to create one:
+# MAGIC
+# MAGIC **Step A — Create the Service Principal:**
+# MAGIC 1. In the Databricks workspace, go to **Settings** (gear icon, top-right)
+# MAGIC 2. Click **Identity and access → Service principals**
+# MAGIC 3. Click **Add service principal → Add new**
+# MAGIC 4. Give it a name (e.g., `mcp-bootcamp-sp`) and click **Add**
+# MAGIC
+# MAGIC **Step B — Generate an OAuth Secret:**
+# MAGIC 1. Click on the service principal you just created
+# MAGIC 2. Go to the **Secrets** tab
+# MAGIC 3. Click **Generate secret**
+# MAGIC 4. **Copy both values immediately** — the secret will not be shown again:
+# MAGIC    - **Client ID** (UUID format, e.g., `a1b2c3d4-...`)
+# MAGIC    - **Client Secret** (long string)
+# MAGIC
+# MAGIC **Step C — Grant Permission on the App:**
+# MAGIC 1. Go to **Compute → Apps** in the left sidebar
+# MAGIC 2. Click on your app (`my-weather-mcp-server`)
+# MAGIC 3. Go to the **Permissions** tab
+# MAGIC 4. Add the service principal with **Can Manage** or **Can Use** permission
+# MAGIC
+# MAGIC ---
+# MAGIC
+# MAGIC #### 💻 How the Code Below Works
+# MAGIC
+# MAGIC We use **two** `WorkspaceClient` instances:
+# MAGIC 1. **Default client** (`WorkspaceClient()`) — uses the notebook token to look up the app URL via the SDK
+# MAGIC 2. **OAuth client** (`WorkspaceClient(host=..., client_id=..., client_secret=...)`) — authenticates
+# MAGIC    as the service principal and is passed to `DatabricksMCPClient`
+# MAGIC
+# MAGIC The widgets below will prompt you for the service principal credentials.
+# MAGIC For production, store these in **Databricks Secrets** (`dbutils.secrets.get(scope, key)`).
+
+# COMMAND ----------
+
+# MAGIC %pip install -q databricks-mcp
+
+# COMMAND ----------
+
+dbutils.library.restartPython()
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC #### Enter your Service Principal credentials
+# MAGIC Run this cell to create the input widgets, then fill them in at the **top of the notebook**.
+
+# COMMAND ----------
+
+dbutils.widgets.text("sp_client_id", "", "Service Principal Client ID")
+dbutils.widgets.text("sp_client_secret", "", "Service Principal Client Secret")
+print("⬆️  Fill in the widgets at the top of this notebook, then run the next cell.")
+
+# COMMAND ----------
+
+from databricks_mcp import DatabricksMCPClient
+from databricks.sdk import WorkspaceClient
+
+PROJECT_NAME = "my-weather-mcp-server"  # Must match the app name from Step 5.5
+
+# ── Step 1: Look up the app URL using the notebook's default auth ──
+# This uses the notebook session token, which is fine for SDK admin calls.
+w = WorkspaceClient()
+app_info = w.apps.get(name=PROJECT_NAME)
+mcp_server_url = f"{app_info.url}/mcp"
+print(f"🌐 MCP server URL: {mcp_server_url}")
+
+# ── Step 2: Read the service principal credentials from the widgets ──
+sp_client_id = dbutils.widgets.get("sp_client_id")
+sp_client_secret = dbutils.widgets.get("sp_client_secret")
+
+if not sp_client_id or not sp_client_secret:
+    raise ValueError(
+        "⚠️ Service principal credentials are required!\n"
+        "Fill in the 'sp_client_id' and 'sp_client_secret' widgets at the top of the notebook.\n"
+        "See the instructions in Step 5.7 above to create a service principal."
+    )
+
+# ── Step 3: Create an OAuth M2M WorkspaceClient ──
+# This client authenticates as the service principal (not the notebook user).
+# The Databricks SDK automatically handles the OAuth token exchange:
+#   client_id + client_secret → OAuth access token → Bearer header
+oauth_client = WorkspaceClient(
+    host=w.config.host,
+    client_id=sp_client_id,
+    client_secret=sp_client_secret,
+)
+print("✅ OAuth M2M WorkspaceClient created (service principal authenticated)")
+
+# ── Step 4: Connect to the MCP server ──
+# DatabricksMCPClient uses the OAuth client to authenticate through the app proxy.
+mcp_client = DatabricksMCPClient(
+    server_url=mcp_server_url,
+    workspace_client=oauth_client,
+)
+
+# List available tools
+tools = mcp_client.list_tools()
+print(f"\n✅ Available tools: {[t.name for t in tools]}")
+
+# Call a tool to verify it works end-to-end
+result = mcp_client.call_tool("get_weather", {"city": "Tokyo"})
+print(f"\n🌤️ Test Result:\n{result}")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Step 5.8: Use in Your Agent
+# MAGIC
+# MAGIC Now use this MCP server in any agent:
+
+# COMMAND ----------
+
+from databricks_langchain import ChatDatabricks
+from langchain_core.messages import HumanMessage
+
+# Convert MCP tools to LangChain
+langchain_tools = mcp_client.to_langchain_tools()
+
+# Create agent (simplified example)
+llm = ChatDatabricks(endpoint="databricks-claude-sonnet-4-5")
+llm_with_tools = llm.bind_tools(langchain_tools)
+
+# Test
+response = llm_with_tools.invoke([
+    HumanMessage(content="What's the weather in Paris?")
+])
+
+print("Question: What's the weather in Paris?")
+print(f"Answer: {response.content}")
+
+# If the response includes tool calls, execute them
+if hasattr(response, 'tool_calls') and response.tool_calls:
+    for tool_call in response.tool_calls:
+        result = mcp_client.call_tool(tool_call['name'], tool_call['args'])
+        print(f"\nTool Result: {result}")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Summary & Next Steps
+# MAGIC
+# MAGIC ### What You Learned:
+# MAGIC
+# MAGIC **Core Concepts (Sections 1-2):**
+# MAGIC - ✅ When to build custom tools vs use managed MCPs
+# MAGIC - ✅ Build simple tools with `@tool` decorator
+# MAGIC - ✅ Add tools to agents
+# MAGIC
+# MAGIC **Production Deployment (Section 5):**
+# MAGIC - ✅ Create FastMCP server (official Databricks template pattern)
+# MAGIC - ✅ Deploy as Databricks App with uv
+# MAGIC - ✅ Connect using DatabricksMCPClient
+# MAGIC - ✅ Use in production agents
+# MAGIC
+# MAGIC **Optional Deep Dive (Sections 3-4):**
+# MAGIC - ⚙️ MCP server architecture concepts
+# MAGIC - ⚙️ Local MCP server development and testing
+# MAGIC
+# MAGIC ### The Pattern:
+# MAGIC
+# MAGIC ```python
+# MAGIC # Development: Simple tool
+# MAGIC @tool
+# MAGIC def my_tool(param: str) -> str:
+# MAGIC     return do_something(param)
+# MAGIC
+# MAGIC # Production: Add to server/tools.py
+# MAGIC @mcp_server.tool
+# MAGIC def my_tool(param: str) -> str:
+# MAGIC     return do_something(param)  # Same logic!
+# MAGIC ```
+# MAGIC
+# MAGIC ### When to Use Each:
+# MAGIC
+# MAGIC | Scenario | Approach |
+# MAGIC |----------|----------|
+# MAGIC | Single external API | Simple `@tool` |
+# MAGIC | Multiple related tools | MCP Server |
+# MAGIC | Databricks data | Managed MCP (Genie, SQL) |
+# MAGIC | Complex state/lifecycle | MCP Server |
+# MAGIC | Need reusability | MCP Server |
+# MAGIC | Production deployment | FastMCP as Databricks App |
+# MAGIC
+# MAGIC ### Complete Agent Architecture:
+# MAGIC
+# MAGIC ```
+# MAGIC User Query
+# MAGIC      ↓
+# MAGIC   Agent
+# MAGIC      ↓
+# MAGIC ┌──────────┬──────────┬──────────┬──────────┐
+# MAGIC │  Vector  │  Genie   │ Weather  │ Custom   │
+# MAGIC │  Search  │   MCP    │   MCP    │   MCP    │
+# MAGIC │(Managed) │(Managed) │(Deployed)│(Deployed)│
+# MAGIC └──────────┴──────────┴──────────┴──────────┘
+# MAGIC      ↓           ↓          ↓          ↓
+# MAGIC     Docs       Data     External   Your
+# MAGIC                         API       Logic
+# MAGIC ```
+# MAGIC
+# MAGIC ### Next Steps:
+# MAGIC - Add more tools to your MCP server
+# MAGIC - Explore MCP server concepts (Sections 3-4) if you skipped them
+# MAGIC - Continue to next module: Evaluation & Production Deployment
+# MAGIC - Explore: [Databricks MCP Documentation](https://docs.databricks.com/aws/en/generative-ai/mcp/)
