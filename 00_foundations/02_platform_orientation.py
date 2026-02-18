@@ -30,7 +30,7 @@
 # MAGIC | **State Storage** | DynamoDB | CosmosDB | Firestore | Lakebase (PostgreSQL) |
 # MAGIC | **Governance** | IAM | RBAC | IAM | Unity Catalog |
 # MAGIC | **Observability** | CloudWatch | App Insights | Cloud Trace | MLflow |
-# MAGIC | **Deployment** | ECS/Lambda | Container Apps | Cloud Run | Model Serving |
+# MAGIC | **Deployment** | ECS/Lambda | Container Apps | Cloud Run | Databricks Apps |
 # MAGIC
 # MAGIC ### Key Differentiators
 # MAGIC

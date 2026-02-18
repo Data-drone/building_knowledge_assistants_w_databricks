@@ -117,16 +117,16 @@ Learn how to add data query capabilities and custom tools to your agents.
 ---
 
 ### Module 5: Deployment (45 min)
-Deploy your agent to production.
+Deploy your agent to production on Databricks Apps.
 
 | Notebook | Topics | Duration |
 |----------|--------|----------|
-| [01_logging.py](05_deployment/01_logging.py) | MLflow logging, UC model registry | 15 min |
-| [02_serving.py](05_deployment/02_serving.py) | agents.deploy(), REST API testing | 15 min |
-| [03_production_monitoring.py](05_deployment/03_production_monitoring.py) | Inference tables, online evaluation | 15 min |
-| [driver_05.py](05_deployment/driver_05.py) | **End-to-End Deployment** | 15 min |
+| [01_apps_dev_loop.py](05_deployment/01_apps_dev_loop.py) | Day-to-day Apps development loop | 10 min |
+| [02_apps_deployment.py](05_deployment/02_apps_deployment.py) | Deploy app + validate `/invocations` | 15 min |
+| [03_production_monitoring.py](05_deployment/03_production_monitoring.py) | MLflow traces + online evaluation checks | 10 min |
+| [04_end_to_end_deployment.py](05_deployment/04_end_to_end_deployment.py) | End-to-end Apps deployment pipeline | 10 min |
 
-**You'll build:** Production-ready agent with monitoring
+**You'll build:** Production-ready Databricks App with monitoring
 
 ---
 
@@ -145,7 +145,7 @@ Deploy your agent to production.
 - Create catalogs/schemas
 - Create Vector Search indexes
 - Create Lakebase projects
-- Deploy to Model Serving
+- Deploy Databricks Apps
 
 **Knowledge:**
 - Python programming
@@ -198,7 +198,7 @@ Deploy your agent to production.
 | **Memory** | Lakebase (PostgreSQL) | Conversation state (checkpointer + store) |
 | **Observability** | MLflow 3.0 | Tracing, evaluation, judges |
 | **Governance** | Unity Catalog | Permissions, audit logs |
-| **Deployment** | Databricks Model Serving | Production serving endpoint |
+| **Deployment** | Databricks Apps | Production app endpoint |
 
 ---
 
@@ -244,7 +244,7 @@ By the end of this bootcamp, you'll have built a production-ready **Internal Kno
 ✅ Remembers user preferences (Lakebase store)
 ✅ Traces all execution (MLflow)
 ✅ Evaluates quality (Scorers + Judges)
-✅ Deploys to production (Model Serving)
+✅ Deploys to production (Databricks Apps)
 ✅ Monitors in real-time (Inference tables)
 
 ---
@@ -262,7 +262,8 @@ databricks_agent_bootcamp/
 ├── 02_memory/                      # Lakebase checkpointing
 ├── 03_evaluation/                  # MLflow judges + scorers
 ├── 04_genie/                       # Structured data queries
-└── 05_deployment/                  # Production serving
+├── 05_deployment/                  # Production monitoring + eval
+└── apps/                           # Databricks Apps source code
 ```
 
 ---
@@ -294,8 +295,8 @@ Install required packages:
 - Test with **small eval datasets** first
 
 ### Production
-- Deploy to **provisioned throughput** endpoints
-- Enable **inference tables** for monitoring
+- Deploy via **Databricks Apps** for app-hosted `/invocations`
+- Enable **MLflow tracing** for monitoring
 - Use **connection pooling** (min_size=2) to avoid cold starts
 - Configure **online evaluation** for quality monitoring
 

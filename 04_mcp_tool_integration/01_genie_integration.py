@@ -661,7 +661,7 @@ print("\n")
 # MAGIC
 # MAGIC ### Next Steps
 # MAGIC
-# MAGIC - **Module 05**: Deploy to production with Model Serving
+# MAGIC - **Module 05**: Deploy to production with Databricks Apps
 # MAGIC - Experiment with other MCP tools (UC Functions, Web Search)
 # MAGIC - Build domain-specific tools for your use case
 

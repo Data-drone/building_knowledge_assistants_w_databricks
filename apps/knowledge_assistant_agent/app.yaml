@@ -1,0 +1,21 @@
+command: ["python", "-m", "agent_server.start_server"]
+
+env:
+  - name: MLFLOW_TRACKING_URI
+    value: "databricks"
+  - name: MLFLOW_EXPERIMENT_NAME
+    value: "/Shared/knowledge_assistant_agent_app"
+  - name: LLM_ENDPOINT
+    value: "databricks-claude-sonnet-4-5"
+  - name: CATALOG
+    value: "agent_bootcamp"
+  - name: SCHEMA
+    value: "knowledge_assistant"
+  - name: GENIE_SPACE_ID
+    value: ""
+  - name: LAKEBASE_INSTANCE_NAME
+    value: "knowledge-assistant-state"
+  - name: ENABLE_MEMORY
+    value: "false"
+  - name: ENABLE_MCP_TOOLS
+    value: "false"

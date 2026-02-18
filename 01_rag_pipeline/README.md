@@ -63,7 +63,7 @@ After completing these notebooks, you'll understand:
 - **Module 02**: Conversation memory with Lakebase
 - **Module 03**: Evaluation and metrics
 - **Module 04**: Multi-tool agents (Genie, UC Functions)
-- **Module 05**: Deployment to Model Serving
+- **Module 05**: Deployment to Databricks Apps
 
 ---
 
@@ -84,6 +84,51 @@ After completing these notebooks, you'll understand:
 - **Vector Search**: Databricks Vector Search with Delta Sync
 - **Observability**: MLflow auto-logging
 - **Storage**: Unity Catalog (Delta tables, Volumes)
+
+---
+
+## Query Deployed App From A Notebook
+
+If you have deployed the agent as a Databricks App, use OAuth auth (not
+`dbutils.notebook...apiToken()`).
+
+### 1) Store an OAuth token in Databricks Secrets (run in terminal or `%sh`)
+
+```bash
+TOKEN=$(databricks auth token --profile adb-984752964297111 -o json | jq -r '.access_token // .token_value // .token')
+databricks secrets create-scope my-secrets --profile adb-984752964297111 || true
+databricks secrets put-secret my-secrets apps_oauth_token \
+  --string-value "$TOKEN" \
+  --profile adb-984752964297111
+```
+
+### 2) Invoke `/invocations` from a notebook cell
+
+```python
+import requests
+
+APP_URL = "https://knowledge-assistant-agent-app-984752964297111.11.azure.databricksapps.com"
+OAUTH_TOKEN = dbutils.secrets.get("my-secrets", "apps_oauth_token")
+
+resp = requests.post(
+    f"{APP_URL}/invocations",
+    headers={
+        "Authorization": f"Bearer {OAUTH_TOKEN}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    },
+    json={"input": [{"role": "user", "content": "What is Databricks MCP in one sentence?"}]},
+    timeout=60,
+    allow_redirects=False,
+)
+
+print("Status:", resp.status_code)
+print("Content-Type:", resp.headers.get("content-type"))
+print(resp.text)
+```
+
+If you get HTML with a sign-in page, your token is not a valid OAuth token for
+Databricks Apps.
 
 ---
 

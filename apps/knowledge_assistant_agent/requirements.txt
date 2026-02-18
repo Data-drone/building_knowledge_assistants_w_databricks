@@ -1,0 +1,10 @@
+mlflow[databricks]>=3.1.0
+fastapi>=0.115.0
+uvicorn>=0.30.0
+python-dotenv>=1.0.0
+databricks-langchain[memory]>=0.8.0
+databricks-sdk
+databricks-mcp
+langgraph>=0.2.50
+langchain-core>=0.3.0
+mcp

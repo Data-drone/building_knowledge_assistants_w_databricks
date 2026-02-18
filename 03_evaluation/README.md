@@ -67,7 +67,7 @@ After completing these notebooks, you'll understand:
 
 **For production deployment**:
 - **Module 04**: Multi-tool agents (Genie, UC Functions)
-- **Module 05**: Deployment to Model Serving
+- **Module 05**: Deployment to Databricks Apps
 
 ---
 
