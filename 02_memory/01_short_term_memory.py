@@ -27,11 +27,7 @@
 # COMMAND ----------
 
 %pip install -q --upgrade mlflow[databricks]>=3.1.0 databricks-langchain[memory]>=0.8.0 databricks-vectorsearch>=0.30 langgraph>=0.2.50 langchain-core>=0.3.0
-
-# COMMAND ----------
-
-dbutils.library.restartPython()
-
+%restart_python
 # COMMAND ----------
 
 # MAGIC %md
@@ -46,6 +42,7 @@ from langchain_core.tools import tool
 from langchain_core.messages import HumanMessage
 from langgraph.graph import StateGraph, MessagesState, END
 from langgraph.prebuilt import ToolNode
+import uuid_utils
 
 # COMMAND ----------
 
@@ -53,15 +50,25 @@ from langgraph.prebuilt import ToolNode
 CATALOG = "agent_bootcamp"
 SCHEMA = "knowledge_assistant"
 LLM_ENDPOINT = "databricks-claude-sonnet-4-5"
-LAKEBASE_PROJECT = "knowledge-assistant-state"
+LAKEBASE_INSTANCE_NAME = "knowledge-assistant-state"
 
 # Derived values
 VECTOR_INDEX = f"{CATALOG}.{SCHEMA}.policy_index"
-ENDPOINT_NAME = "agent_bootcamp_endpoint"
+#ENDPOINT_NAME = "agent_bootcamp_endpoint"
+ENDPOINT_NAME = "one-env-shared-endpoint-15"
 
 print(f"✓ Configuration loaded")
 print(f"  Vector Index: {VECTOR_INDEX}")
-print(f"  Lakebase Project: {LAKEBASE_PROJECT}")
+print(f"  Lakebase Instance: {LAKEBASE_INSTANCE_NAME}")
+
+
+def resolve_thread_id(custom_thread_id: str | None = None, conversation_id: str | None = None) -> str:
+    """Canonical thread-id priority: custom input -> conversation id -> generated UUID."""
+    if custom_thread_id:
+        return custom_thread_id
+    if conversation_id:
+        return conversation_id
+    return str(uuid_utils.uuid7())
 
 # COMMAND ----------
 
@@ -165,14 +172,14 @@ from databricks.sdk import WorkspaceClient
 w = WorkspaceClient()
 instances = list(w.database.list_database_instances())
 
-target_instance = next((inst for inst in instances if inst.name == LAKEBASE_PROJECT), None)
+target_instance = next((inst for inst in instances if inst.name == LAKEBASE_INSTANCE_NAME), None)
 if not target_instance:
-    raise Exception(f"Lakebase instance '{LAKEBASE_PROJECT}' not found. Please create it first.")
+    raise Exception(f"Lakebase instance '{LAKEBASE_INSTANCE_NAME}' not found. Please create it first.")
 
-print(f"✓ Lakebase instance '{LAKEBASE_PROJECT}' found (State: {target_instance.state})")
+print(f"✓ Lakebase instance '{LAKEBASE_INSTANCE_NAME}' found (State: {target_instance.state})")
 
 # Initialize CheckpointSaver
-checkpointer = CheckpointSaver(instance_name=LAKEBASE_PROJECT)
+checkpointer = CheckpointSaver(instance_name=LAKEBASE_INSTANCE_NAME)
 
 try:
     checkpointer.setup()
@@ -198,7 +205,7 @@ print("✓ Agent compiled with CheckpointSaver")
 # COMMAND ----------
 
 # Start a conversation with thread_id
-thread_id = "demo-001"
+thread_id = resolve_thread_id(custom_thread_id="demo-001")
 config = {"configurable": {"thread_id": thread_id}}
 
 # Turn 1

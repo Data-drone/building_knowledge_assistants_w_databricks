@@ -65,7 +65,8 @@ DOCS_VOLUME = f"/Volumes/{CATALOG}/{SCHEMA}/docs"
 # Derived names
 CHUNKS_TABLE = f"{CATALOG}.{SCHEMA}.policy_chunks"
 VECTOR_INDEX = f"{CATALOG}.{SCHEMA}.policy_index"
-ENDPOINT_NAME = "agent_bootcamp_endpoint"
+#ENDPOINT_NAME = "agent_bootcamp_endpoint"
+ENDPOINT_NAME = "one-env-shared-endpoint-15"
 
 # Enable MLflow auto-logging
 mlflow.langchain.autolog()

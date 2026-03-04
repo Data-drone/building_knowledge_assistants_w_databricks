@@ -402,13 +402,10 @@ See separate policies for:
 }
 
 # Write policies to volume
-volume_path = DOCS_VOLUME.replace("/Volumes/", "/dbfs/Volumes/")
-import os
-
+# Use dbutils.fs.put so this works consistently in jobs and interactive runs.
 for filename, content in policies.items():
-    file_path = os.path.join(volume_path, filename)
-    with open(file_path, "w") as f:
-        f.write(content)
+    file_path = f"{DOCS_VOLUME}/{filename}"
+    dbutils.fs.put(file_path, content, overwrite=True)
     print(f"✅ Created {filename}")
 
 # List files

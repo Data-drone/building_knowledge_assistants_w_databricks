@@ -287,7 +287,7 @@ def manual_employee_lookup(employee_id: int) -> str:
 
 # Test manual tool
 print("Manual Tool (NO governance):")
-result = manual_employee_lookup.invoke({"employee_id": 1001})
+result = manual_employee_lookup.invoke({"employee_id": 1})
 print(f"  Result: {result}")
 print("  ⚠️  No permission check! Tool bypasses Unity Catalog.\n")
 
@@ -302,7 +302,7 @@ RETURNS STRING
 LANGUAGE SQL
 COMMENT 'Get employee info by ID (governed)'
 RETURN (
-  SELECT CONCAT(name, ' - ', title, ' (', department, ')')
+  SELECT CONCAT(name, ' - ', role, ' (', department, ')')
   FROM {CATALOG}.{SCHEMA}.employee_data
   WHERE employee_id = emp_id
   LIMIT 1
@@ -314,8 +314,7 @@ print(f"✓ Created UC Function: {CATALOG}.{SCHEMA}.get_employee")
 # COMMAND ----------
 
 # Now expose via MCP
-from databricks_mcp import DatabricksMCPClient, DatabricksOAuthClientProvider
-from mcp.client.streamable_http import streamablehttp_client
+from databricks_mcp import DatabricksMCPClient
 from config import get_mcp_endpoint_url
 
 # Connect to UC Functions MCP
@@ -323,20 +322,24 @@ uc_mcp_url = get_mcp_endpoint_url("uc_functions", catalog=CATALOG, schema=SCHEMA
 
 print(f"Connecting to UC Functions MCP: {uc_mcp_url}")
 
-client = DatabricksMCPClient(
-    uc_mcp_url,
-    DatabricksOAuthClientProvider(),
-    streamablehttp_client()
-)
+workspace_client = get_workspace_client()
+try:
+    client = DatabricksMCPClient(
+        server_url=uc_mcp_url,
+        workspace_client=workspace_client,
+    )
 
-# Get governed tools
-uc_tools = client.get_tools()
-print(f"\n✓ Retrieved {len(uc_tools)} governed tools from MCP")
+    # Get governed tools
+    uc_tools = client.list_tools()
+    print(f"\n✓ Retrieved {len(uc_tools)} governed tools from MCP")
 
-for tool in uc_tools:
-    print(f"  - {tool.name}: {tool.description}")
+    for tool in uc_tools:
+        print(f"  - {tool.name}: {tool.description}")
 
-print("\n✅ These tools enforce Unity Catalog permissions on every call!")
+    print("\n✅ These tools enforce Unity Catalog permissions on every call!")
+except Exception as e:
+    print(f"\n⚠️ MCP tool listing skipped: {e}")
+    print("   Continue to the next module; governance concepts remain the same.")
 
 # COMMAND ----------
 

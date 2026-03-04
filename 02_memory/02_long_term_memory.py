@@ -27,10 +27,7 @@
 # COMMAND ----------
 
 %pip install -q --upgrade mlflow[databricks]>=3.1.0 databricks-langchain[memory]>=0.8.0 databricks-vectorsearch>=0.30 langgraph>=0.2.50 langchain-core>=0.3.0
-
-# COMMAND ----------
-
-dbutils.library.restartPython()
+%restart_python
 
 # COMMAND ----------
 
@@ -54,11 +51,14 @@ from datetime import datetime
 CATALOG = "agent_bootcamp"
 SCHEMA = "knowledge_assistant"
 LLM_ENDPOINT = "databricks-claude-sonnet-4-5"
-LAKEBASE_PROJECT = "knowledge-assistant-state"
+LAKEBASE_INSTANCE_NAME = "knowledge-assistant-state"
+EMBEDDING_ENDPOINT = "databricks-gte-large-en"
+EMBEDDING_DIMS = 1024
 
 # Derived values
 VECTOR_INDEX = f"{CATALOG}.{SCHEMA}.policy_index"
-ENDPOINT_NAME = "agent_bootcamp_endpoint"
+#ENDPOINT_NAME = "agent_bootcamp_endpoint"
+ENDPOINT_NAME = "one-env-shared-endpoint-15"
 
 # Utility function for namespace-safe user IDs
 def sanitize_namespace_id(user_id: str) -> str:
@@ -66,6 +66,16 @@ def sanitize_namespace_id(user_id: str) -> str:
     return user_id.replace(".", "_").replace("@", "_at_")
 
 print(f"✓ Configuration loaded")
+
+
+def get_session_id(custom_inputs: dict | None = None, conversation_id: str | None = None) -> str | None:
+    """Canonical session-id priority for tracing metadata in app/server runtimes."""
+    ci = custom_inputs or {}
+    if ci.get("session_id"):
+        return str(ci["session_id"])
+    if conversation_id:
+        return str(conversation_id)
+    return None
 
 # COMMAND ----------
 
@@ -138,11 +148,11 @@ workflow.add_edge("tools", "agent")
 from databricks.sdk import WorkspaceClient
 w = WorkspaceClient()
 instances = list(w.database.list_database_instances())
-target_instance = next((inst for inst in instances if inst.name == LAKEBASE_PROJECT), None)
+target_instance = next((inst for inst in instances if inst.name == LAKEBASE_INSTANCE_NAME), None)
 if not target_instance:
-    raise Exception(f"Lakebase instance '{LAKEBASE_PROJECT}' not found.")
+    raise Exception(f"Lakebase instance '{LAKEBASE_INSTANCE_NAME}' not found.")
 
-checkpointer = CheckpointSaver(instance_name=LAKEBASE_PROJECT)
+checkpointer = CheckpointSaver(instance_name=LAKEBASE_INSTANCE_NAME)
 try:
     checkpointer.setup()
 except Exception as e:
@@ -191,7 +201,7 @@ print("\n→ Agent doesn't remember Engineering department (different thread)")
 # COMMAND ----------
 
 # Initialize DatabricksStore for long-term memory
-store = DatabricksStore(instance_name=LAKEBASE_PROJECT)
+store = DatabricksStore(instance_name=LAKEBASE_INSTANCE_NAME)
 try:
     store.setup()
     print("✓ DatabricksStore tables initialized")
@@ -202,6 +212,7 @@ except Exception as e:
         raise
 
 print("✓ DatabricksStore ready")
+print(f"  Embedding endpoint: {EMBEDDING_ENDPOINT} ({EMBEDDING_DIMS} dims)")
 print("\nMemory Architecture:")
 print("  CheckpointSaver → Short-term: conversation history (per thread)")
 print("  DatabricksStore → Long-term: user facts/preferences (across all threads)")
