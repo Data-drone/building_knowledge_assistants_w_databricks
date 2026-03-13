@@ -1,0 +1,18 @@
+
+.databricks
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+
+# Local environment files
+.env
+.venv/
+venv/
+
+# Editor and OS files
+.vscode/
+.DS_Store
+
+# Notebook checkpoints
+.ipynb_checkpoints/

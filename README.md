@@ -65,10 +65,8 @@ Build your first document-based Q&A agent.
 
 | Notebook | Topics | Duration |
 |----------|--------|----------|
-| [01_data_prep.py](01_rag_pipeline/01_data_prep.py) | Document chunking, Delta tables | 15 min |
-| [02_vector_index.py](01_rag_pipeline/02_vector_index.py) | Delta Sync Vector Search, embeddings | 20 min |
-| [03_vector_search_mcp.py](01_rag_pipeline/03_vector_search_mcp.py) | MCP client, governed tools | 10 min |
-| [driver_01.py](01_rag_pipeline/driver_01.py) | **RAG Agent with Vector Search** | 15 min |
+| [00_your_first_agent_on_databricks.py](01_rag_pipeline/00_your_first_agent_on_databricks.py) | First agent loop with Databricks-hosted LLM | 15 min |
+| [01_building_a_doc_store_on_vector_search.py](01_rag_pipeline/01_building_a_doc_store_on_vector_search.py) | Document chunking, Delta Sync Vector Search, RAG pattern | 25 min |
 
 **You'll build:** Agent that answers policy questions from documents
 
@@ -79,10 +77,8 @@ Add conversation memory for multi-turn interactions.
 
 | Notebook | Topics | Duration |
 |----------|--------|----------|
-| [01_lakebase_autoscaling.py](02_memory/01_lakebase_autoscaling.py) | Lakebase projects, branches, scale-to-zero | 15 min |
-| [02_checkpointer.py](02_memory/02_checkpointer.py) | PostgresSaver, thread-based memory | 20 min |
-| [03_long_term_store.py](02_memory/03_long_term_store.py) | PostgresStore, user preferences | 20 min |
-| [driver_02.py](02_memory/driver_02.py) | **Agent with Memory** | 15 min |
+| [01_short_term_memory.py](02_memory/01_short_term_memory.py) | Checkpoint saver, thread memory, multi-turn conversations | 20 min |
+| [02_long_term_memory.py](02_memory/02_long_term_memory.py) | DatabricksStore, user preferences, cross-session memory | 25 min |
 
 **You'll build:** Agent with multi-turn conversations and persistent state
 
@@ -94,11 +90,7 @@ Implement observability and evaluation.
 | Notebook | Topics | Duration |
 |----------|--------|----------|
 | [01_tracing.py](03_evaluation/01_tracing.py) | MLflow tracing, span analysis | 15 min |
-| [02_builtin_scorers.py](03_evaluation/02_builtin_scorers.py) | Correctness, Groundedness, Guidelines | 20 min |
-| [03_make_judge.py](03_evaluation/03_make_judge.py) | Custom judges, Literal types | 15 min |
-| [04_agent_as_judge.py](03_evaluation/04_agent_as_judge.py) | Trace analysis, tool optimization | 15 min |
-| [05_judge_alignment.py](03_evaluation/05_judge_alignment.py) | Human feedback, judge alignment | 20 min |
-| [driver_03.py](03_evaluation/driver_03.py) | **Full Evaluation Pipeline** | 15 min |
+| [02_evaluation.py](03_evaluation/02_evaluation.py) | Built-in scorers, custom judges, quality gates | 30 min |
 
 **You'll build:** Comprehensive evaluation framework with scorers and judges
 
@@ -154,21 +146,15 @@ Deploy your agent to production on Databricks Apps.
 
 ### Setup Instructions
 
-**⚠️ CRITICAL: Follow these steps in order!**
+**⚠️ Follow these steps in order**
 
-1. **Clone the repository to your Databricks workspace:**
+1. **Clone the repository:**
    ```bash
-   git clone https://github.com/your-org/databricks_agent_bootcamp
+   git clone https://github.com/Data-drone/building_knowledge_assistants_w_databricks.git databricks_agent_bootcamp
    cd databricks_agent_bootcamp
    ```
 
-2. **🔧 FIRST: Install required packages (5 minutes)**
-   - **Open and run:** [00_INSTALL_REQUIREMENTS.py](00_INSTALL_REQUIREMENTS.py)
-   - This notebook installs MLflow 3.x, LangGraph, databricks-mcp, and other dependencies
-   - **Why?** MLR 17.3 LTS includes MLflow 2.x, but this bootcamp requires MLflow 3.x for ResponsesAgent
-   - **Wait for completion** before proceeding
-
-3. **Update configuration in [config.py](config.py):**
+2. **Update configuration in [config.py](config.py):**
    ```python
    CATALOG = "agent_bootcamp"           # Your catalog name
    SCHEMA = "knowledge_assistant"       # Your schema name
@@ -176,11 +162,12 @@ Deploy your agent to production on Databricks Apps.
    REGION = "us-west-2"                 # Your cloud region
    ```
 
-4. **Run the setup notebook:**
+3. **Run the setup notebook (15 minutes):**
    - Open [00_foundations/00_setup.py](00_foundations/00_setup.py)
-   - Run all cells to create Unity Catalog assets and sample data
+   - Run all cells to install foundational dependencies and create Unity Catalog assets, sample data, and the Lakebase project
+   - Wait for the notebook to complete before moving to the next module
 
-5. **Follow the learning path:**
+4. **Follow the learning path:**
    - Start with Module 0 (Foundations)
    - Progress through modules sequentially
    - Each "driver" notebook demonstrates the complete agent
@@ -196,7 +183,7 @@ Deploy your agent to production on Databricks Apps.
 | **Vector Search** | Databricks Vector Search (Delta Sync) | Document similarity search |
 | **Structured Data** | Genie | Natural language to SQL |
 | **Memory** | Lakebase (PostgreSQL) | Conversation state (checkpointer + store) |
-| **Observability** | MLflow 3.0 | Tracing, evaluation, judges |
+| **Observability** | MLflow 3.0+ | Tracing, evaluation, judges |
 | **Governance** | Unity Catalog | Permissions, audit logs |
 | **Deployment** | Databricks Apps | Production app endpoint |
 
@@ -261,28 +248,9 @@ databricks_agent_bootcamp/
 ├── 01_rag_pipeline/                # Vector Search + documents
 ├── 02_memory/                      # Lakebase checkpointing
 ├── 03_evaluation/                  # MLflow judges + scorers
-├── 04_genie/                       # Structured data queries
+├── 04_mcp_tool_integration/        # Genie + custom MCP tools
 ├── 05_deployment/                  # Production monitoring + eval
 └── apps/                           # Databricks Apps source code
-```
-
----
-
-## 🔧 Dependencies
-
-Install required packages:
-
-```python
-%pip install -q \
-  mlflow[databricks]>=3.1 \
-  databricks-sdk \
-  databricks-langchain \
-  databricks-agents>=1.0 \
-  databricks-mcp \
-  langgraph \
-  langgraph-checkpoint-postgres \
-  langchain-core \
-  psycopg[binary]
 ```
 
 ---
@@ -335,7 +303,7 @@ Install required packages:
 
 ## 📚 Additional Resources
 
-- [Databricks Agent SDK Documentation](https://docs.databricks.com/agent-sdk/)
+- [Databricks Agent Framework Documentation](https://docs.databricks.com/en/generative-ai/agent-framework/author-agent)
 - [MLflow 3.0 Evaluation Guide](https://mlflow.org/docs/latest/evaluation/)
 - [LangGraph Documentation](https://langchain-ai.github.io/langgraph/)
 - [Unity Catalog Best Practices](https://docs.databricks.com/data-governance/unity-catalog/)
@@ -348,12 +316,6 @@ Issues and pull requests welcome! Please follow these guidelines:
 - Test all notebooks before submitting
 - Update README for significant changes
 - Follow Databricks notebook format conventions
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License - see LICENSE file for details.
 
 ---
 
@@ -379,5 +341,3 @@ After completing this bootcamp:
 ---
 
 **Happy Building! 🚀**
-
-For questions or feedback, please open an issue or contact the Databricks Agent team.
