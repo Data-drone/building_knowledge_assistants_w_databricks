@@ -9,15 +9,17 @@
 # MAGIC - Store user facts and preferences with DatabricksStore
 # MAGIC - Compare short-term vs long-term memory
 # MAGIC - Organize memory with namespace patterns
-# MAGIC - Combine CheckpointSaver and DatabricksStore
+# MAGIC - Build LLM-managed memory tools (get, save, delete)
+# MAGIC - Use semantic search over memories instead of exact key lookups
+# MAGIC - Combine CheckpointSaver and DatabricksStore in a production-ready pattern
 # MAGIC
 # MAGIC ## Prerequisites
 # MAGIC - Completed Notebook 01 (short-term memory) OR understand checkpointed RAG agents
 # MAGIC - Vector Search index available
-# MAGIC - Lakebase target created
+# MAGIC - Lakebase instance created
 # MAGIC
 # MAGIC ## Estimated Time
-# MAGIC 20 minutes
+# MAGIC 30 minutes
 
 # COMMAND ----------
 
@@ -36,9 +38,11 @@
 
 # COMMAND ----------
 
+import json
 import mlflow
 from databricks_langchain import ChatDatabricks, CheckpointSaver, DatabricksStore
 from databricks.vector_search.client import VectorSearchClient
+from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import StateGraph, MessagesState, END
@@ -51,9 +55,7 @@ from datetime import datetime
 CATALOG = "agent_bootcamp"
 SCHEMA = "knowledge_assistant"
 LLM_ENDPOINT = "databricks-claude-sonnet-4-6"
-LAKEBASE_INSTANCE_NAME = None
-LAKEBASE_AUTOSCALING_PROJECT = "knowledge-assistant-state"
-LAKEBASE_AUTOSCALING_BRANCH = "production"
+LAKEBASE_INSTANCE_NAME = "knowledge-assistant-state"
 EMBEDDING_ENDPOINT = "databricks-gte-large-en"
 EMBEDDING_DIMS = 1024
 
@@ -67,14 +69,7 @@ def sanitize_namespace_id(user_id: str) -> str:
     """DatabricksStore doesn't allow periods in namespace labels."""
     return user_id.replace(".", "_").replace("@", "_at_")
 
-
-def lakebase_target() -> str:
-    if LAKEBASE_INSTANCE_NAME:
-        return LAKEBASE_INSTANCE_NAME
-    return f"{LAKEBASE_AUTOSCALING_PROJECT}/{LAKEBASE_AUTOSCALING_BRANCH}"
-
 print(f"✓ Configuration loaded")
-print(f"  Lakebase Target: {lakebase_target()}")
 
 
 def get_session_id(custom_inputs: dict | None = None, conversation_id: str | None = None) -> str | None:
@@ -154,19 +149,19 @@ workflow.add_conditional_edges("agent", should_continue, {"tools": "tools", END:
 workflow.add_edge("tools", "agent")
 
 # Add CheckpointSaver
-checkpointer = CheckpointSaver(
-    instance_name=LAKEBASE_INSTANCE_NAME,
-    project=LAKEBASE_AUTOSCALING_PROJECT,
-    branch=LAKEBASE_AUTOSCALING_BRANCH,
-)
+from databricks.sdk import WorkspaceClient
+w = WorkspaceClient()
+instances = list(w.database.list_database_instances())
+target_instance = next((inst for inst in instances if inst.name == LAKEBASE_INSTANCE_NAME), None)
+if not target_instance:
+    raise Exception(f"Lakebase instance '{LAKEBASE_INSTANCE_NAME}' not found.")
+
+checkpointer = CheckpointSaver(instance_name=LAKEBASE_INSTANCE_NAME)
 try:
     checkpointer.setup()
 except Exception as e:
     if "already exists" not in str(e).lower():
-        raise Exception(
-            f"CheckpointSaver setup failed for {lakebase_target()}. "
-            "Verify the Lakebase target exists and your role has CREATE access on schema public."
-        ) from e
+        raise
 
 agent_with_checkpointer = workflow.compile(checkpointer=checkpointer)
 
@@ -210,13 +205,7 @@ print("\n→ Agent doesn't remember Engineering department (different thread)")
 # COMMAND ----------
 
 # Initialize DatabricksStore for long-term memory
-store = DatabricksStore(
-    instance_name=LAKEBASE_INSTANCE_NAME,
-    project=LAKEBASE_AUTOSCALING_PROJECT,
-    branch=LAKEBASE_AUTOSCALING_BRANCH,
-    embedding_endpoint=EMBEDDING_ENDPOINT,
-    embedding_dims=EMBEDDING_DIMS,
-)
+store = DatabricksStore(instance_name=LAKEBASE_INSTANCE_NAME)
 try:
     store.setup()
     print("✓ DatabricksStore tables initialized")
@@ -224,10 +213,7 @@ except Exception as e:
     if "already exists" in str(e).lower():
         print("✓ DatabricksStore tables already exist (reusing)")
     else:
-        raise Exception(
-            f"DatabricksStore setup failed for {lakebase_target()}. "
-            "Verify the Lakebase target exists and your role has CREATE access on schema public."
-        ) from e
+        raise
 
 print("✓ DatabricksStore ready")
 print(f"  Embedding endpoint: {EMBEDDING_ENDPOINT} ({EMBEDDING_DIMS} dims)")
@@ -305,7 +291,7 @@ def call_agent_with_store(state: MessagesState):
     """Agent logic that reads from Store for personalization."""
     messages = state["messages"]
 
-    # Extract user_id (in production, pass a stable user identity per person)
+    # Extract user_id (in production, from authentication)
     user_id = "alice@company.com"  # Hardcoded for demo
     sanitized_user_id = sanitize_namespace_id(user_id)
 
@@ -373,119 +359,302 @@ print("\n→ Agent personalizes response using Engineering department from Datab
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Step 10: Combined Memory - CheckpointSaver + DatabricksStore
-
-# COMMAND ----------
-
-# Start a conversation
-print("COMBINED MEMORY DEMO:")
-print("=" * 80)
-thread_combo = "combo-demo"
-config_combo = {"configurable": {"thread_id": thread_combo}}
-
-# Turn 1: Ask about time off
-print("\nTurn 1:")
-result1 = agent_with_both.invoke(
-    {"messages": [HumanMessage(content="I need to take some time off next month.")]},
-    config_combo
-)
-print(f"User: I need to take some time off next month.")
-print(f"Agent: {result1['messages'][-1].content[:200]}...")
-
-# Turn 2: Follow-up question
-print("\nTurn 2:")
-result2 = agent_with_both.invoke(
-    {"messages": [HumanMessage(content="When would be a good time to discuss this?")]},
-    config_combo
-)
-print(f"User: When would be a good time to discuss this?")
-print(f"Agent: {result2['messages'][-1].content[:200]}...")
-print("\n→ Agent uses:")
-print("  • CheckpointSaver: Knows 'this' refers to time off")
-print("  • DatabricksStore: Suggests morning (user preference)")
+# MAGIC ## Step 10: Limitations of Manual Memory
+# MAGIC
+# MAGIC The agent from Step 8 works, but the manual approach has real problems:
+# MAGIC
+# MAGIC | Limitation | Why It Matters |
+# MAGIC |-----------|----------------|
+# MAGIC | **Hardcoded keys** | Developer must anticipate every fact type (`department`, `role`, ...) |
+# MAGIC | **No semantic search** | `store.get(ns, "department")` only works with exact keys — can't ask "what do I know about this user?" |
+# MAGIC | **No user control** | User can't ask the agent to forget something (GDPR!) |
+# MAGIC | **Doesn't scale** | Every new fact type requires code changes |
+# MAGIC | **Agent can't learn** | The LLM never decides *what's worth remembering* — the developer decides at build time |
+# MAGIC
+# MAGIC The production pattern flips this: **give the LLM tools to manage memory itself.**
+# MAGIC The agent decides when to read, write, and delete memories — just like it decides when to search documents.
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Step 11: Update Memory Based on Conversations
+# MAGIC ## Step 11: Build Memory Tools
+# MAGIC
+# MAGIC Instead of hardcoding memory reads/writes in the agent node, we define three
+# MAGIC tools that the LLM can call on its own:
+# MAGIC
+# MAGIC | Tool | Purpose | Store Method |
+# MAGIC |------|---------|-------------|
+# MAGIC | `get_user_memory` | Recall facts about the user | `store.search()` (semantic) |
+# MAGIC | `save_user_memory` | Remember new facts | `store.put()` |
+# MAGIC | `delete_user_memory` | Forget specific facts | `store.delete()` |
+# MAGIC
+# MAGIC Key differences from the manual approach:
+# MAGIC - **Semantic search** (`store.search`) instead of exact key lookup (`store.get`)
+# MAGIC - **Store passed via config** (`RunnableConfig`) — not a global variable
+# MAGIC - **User-scoped** — `user_id` flows through the graph config
 
 # COMMAND ----------
 
-# Learn new fact from conversation
-new_interest = "cloud architecture"
+@tool
+def get_user_memory(query: str, config: RunnableConfig) -> str:
+    """Search for relevant information about the user from long-term memory.
+    Use this to recall facts, preferences, or details previously shared by the user."""
+    user_id = config.get("configurable", {}).get("user_id")
+    if not user_id:
+        return "Memory not available - no user_id provided."
 
-# Get existing interests
-interests_item = store.get(facts_namespace, "interests")
-interests = interests_item.value.get("value", []) if interests_item else []
+    store_ref = config.get("configurable", {}).get("store")
+    if not store_ref:
+        return "Memory not available - store not configured."
 
-# Add new interest
-if new_interest not in interests:
-    interests.append(new_interest)
-    store.put(
-        facts_namespace,
-        "interests",
-        {"value": interests, "updated_at": datetime.now().isoformat()}
-    )
-    print(f"✓ Learned new interest: {new_interest}")
-    print(f"  All interests: {interests}")
-    print("\n→ This fact persists across all future conversations")
+    namespace = ("user_memories", sanitize_namespace_id(user_id))
+    results = store_ref.search(namespace, query=query, limit=5)
+
+    if not results:
+        return "No memories found for this user."
+
+    items = [f"- [{item.key}]: {json.dumps(item.value)}" for item in results]
+    return f"Found {len(results)} relevant memories:\n" + "\n".join(items)
+
+
+@tool
+def save_user_memory(memory_key: str, memory_data_json: str, config: RunnableConfig) -> str:
+    """Save information about the user to long-term memory.
+    Use this when the user shares facts, preferences, or important details worth remembering."""
+    user_id = config.get("configurable", {}).get("user_id")
+    if not user_id:
+        return "Cannot save memory - no user_id provided."
+
+    store_ref = config.get("configurable", {}).get("store")
+    if not store_ref:
+        return "Cannot save memory - store not configured."
+
+    namespace = ("user_memories", sanitize_namespace_id(user_id))
+    try:
+        memory_data = json.loads(memory_data_json)
+        if not isinstance(memory_data, dict):
+            return f"Failed: memory_data must be a JSON object, not {type(memory_data).__name__}"
+        store_ref.put(namespace, memory_key, memory_data)
+        return f"Successfully saved memory '{memory_key}' for user."
+    except json.JSONDecodeError as e:
+        return f"Failed to save memory: Invalid JSON - {e}"
+
+
+@tool
+def delete_user_memory(memory_key: str, config: RunnableConfig) -> str:
+    """Delete a specific memory from the user's long-term memory.
+    Use this when the user asks to forget specific information."""
+    user_id = config.get("configurable", {}).get("user_id")
+    if not user_id:
+        return "Cannot delete memory - no user_id provided."
+
+    store_ref = config.get("configurable", {}).get("store")
+    if not store_ref:
+        return "Cannot delete memory - store not configured."
+
+    namespace = ("user_memories", sanitize_namespace_id(user_id))
+    store_ref.delete(namespace, memory_key)
+    return f"Successfully deleted memory '{memory_key}' for user."
+
+
+memory_tools_list = [get_user_memory, save_user_memory, delete_user_memory]
+print("✓ Memory tools defined:")
+for t in memory_tools_list:
+    print(f"  • {t.name}: {t.description.splitlines()[0]}")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Step 12: Build LLM-Managed Memory Agent
+# MAGIC
+# MAGIC Now we wire the memory tools into the agent alongside the RAG tool.
+# MAGIC The system prompt tells the LLM *how* to use memory — but the LLM
+# MAGIC decides *when* and *what* to remember.
+
+# COMMAND ----------
+
+MEMORY_SYSTEM_PROMPT = """You are a helpful assistant with access to company policy documents and long-term memory.
+
+You have memory tools that let you remember information about users across conversations:
+- Use get_user_memory to search for previously saved information about the user
+- Use save_user_memory to remember important facts, preferences, or details the user shares
+- Use delete_user_memory to forget specific information when asked
+
+Guidelines:
+1. At the start of a conversation, check for relevant memories to personalize your response
+2. When the user shares personal details (department, role, preferences), save them
+3. When the user asks you to forget something, delete that specific memory
+4. Use search_policy_documents for company policy questions"""
+
+all_tools = [search_policy_documents] + memory_tools_list
+llm_with_all_tools = llm.bind_tools(all_tools)
+
+def call_memory_agent(state: MessagesState, config: RunnableConfig):
+    system_msg = SystemMessage(content=MEMORY_SYSTEM_PROMPT)
+    messages = [system_msg] + state["messages"]
+    response = llm_with_all_tools.invoke(messages, config)
+    return {"messages": [response]}
+
+workflow_memory = StateGraph(MessagesState)
+workflow_memory.add_node("agent", call_memory_agent)
+workflow_memory.add_node("tools", ToolNode(all_tools))
+workflow_memory.set_entry_point("agent")
+workflow_memory.add_conditional_edges("agent", should_continue, {"tools": "tools", END: END})
+workflow_memory.add_edge("tools", "agent")
+
+memory_agent = workflow_memory.compile(checkpointer=checkpointer)
+
+print("✓ LLM-managed memory agent built")
+print(f"  Tools: {[t.name for t in all_tools]}")
+print("  Short-term: CheckpointSaver | Long-term: DatabricksStore via memory tools")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Step 13: Demo — LLM-Managed Memory in Action
+# MAGIC
+# MAGIC Three scenarios show how the LLM autonomously manages memory:
+# MAGIC 1. **Auto-save** — User shares info, LLM decides to call `save_user_memory`
+# MAGIC 2. **Auto-recall** — New session, LLM calls `get_user_memory` on its own
+# MAGIC 3. **Auto-delete** — User asks to forget something, LLM calls `delete_user_memory`
+
+# COMMAND ----------
+
+# Scenario 1: User shares info → LLM saves it autonomously
+user_id = "alice@company.com"
+config_s1 = {
+    "configurable": {
+        "thread_id": "llm-memory-session-1",
+        "store": store,
+        "user_id": user_id,
+    }
+}
+
+print("SESSION 1 — User shares personal info:")
+print("=" * 80)
+result_s1 = memory_agent.invoke(
+    {"messages": [HumanMessage(content=(
+        "Hi! I work in the Engineering department as a Senior ML Engineer. "
+        "I prefer morning meetings and I'm interested in cloud architecture."
+    ))]},
+    config_s1,
+)
+print("User: Hi! I work in the Engineering department as a Senior ML Engineer. ...")
+print(f"Agent: {result_s1['messages'][-1].content[:300]}...")
+
+# Inspect what the LLM stored
+print("\n--- Memories the agent saved ---")
+ns = ("user_memories", sanitize_namespace_id(user_id))
+saved_items = store.search(ns, query="user information", limit=10)
+for item in saved_items:
+    print(f"  [{item.key}]: {item.value}")
+if not saved_items:
+    print("  (none yet — the LLM may batch saves differently)")
+
+# COMMAND ----------
+
+# Scenario 2: New session → LLM recalls memories on its own
+config_s2 = {
+    "configurable": {
+        "thread_id": "llm-memory-session-2",
+        "store": store,
+        "user_id": user_id,
+    }
+}
+
+print("\nSESSION 2 — New thread, agent recalls memories:")
+print("=" * 80)
+result_s2 = memory_agent.invoke(
+    {"messages": [HumanMessage(content="What professional development should I focus on?")]},
+    config_s2,
+)
+print("User: What professional development should I focus on?")
+print(f"Agent: {result_s2['messages'][-1].content[:300]}...")
+print("\n→ Compare with Step 5: the agent now remembers Engineering + ML Engineer from a previous session!")
+
+# COMMAND ----------
+
+# Scenario 3: User asks to forget info → LLM deletes it
+config_s3 = {
+    "configurable": {
+        "thread_id": "llm-memory-session-3",
+        "store": store,
+        "user_id": user_id,
+    }
+}
+
+print("\nSESSION 3 — User asks to forget info:")
+print("=" * 80)
+result_s3 = memory_agent.invoke(
+    {"messages": [HumanMessage(content="Please forget my meeting time preference.")]},
+    config_s3,
+)
+print("User: Please forget my meeting time preference.")
+print(f"Agent: {result_s3['messages'][-1].content[:300]}...")
+
+# Verify deletion
+print("\n--- Remaining memories ---")
+remaining = store.search(ns, query="meeting preference", limit=5)
+for item in remaining:
+    print(f"  [{item.key}]: {item.value}")
+if not remaining:
+    print("  ✓ Meeting preference deleted")
 
 # COMMAND ----------
 
 # MAGIC %md
 # MAGIC ## Summary
 # MAGIC
-# MAGIC ### What We Built
-# MAGIC - ✅ Checkpointed RAG agent (short-term memory)
-# MAGIC - ✅ Demonstrated cross-session memory limitation
-# MAGIC - ✅ Added DatabricksStore for persistent memory
-# MAGIC - ✅ Organized memory with namespaces
-# MAGIC - ✅ Modified agent to inject user context
-# MAGIC - ✅ Combined both memory types
+# MAGIC ### What We Built — Two Approaches
+# MAGIC
+# MAGIC | | Manual (Steps 4–9) | LLM-Managed (Steps 11–13) |
+# MAGIC |---|---|---|
+# MAGIC | **Who decides what to remember** | Developer (hardcoded keys) | The LLM (tool calls) |
+# MAGIC | **Memory retrieval** | Exact key: `store.get(ns, "department")` | Semantic search: `store.search(ns, query=...)` |
+# MAGIC | **Memory deletion** | Not supported | `delete_user_memory` tool |
+# MAGIC | **Scales to new fact types** | No — requires code changes | Yes — LLM picks keys and values |
+# MAGIC | **User control** | None | User can ask to save/forget |
+# MAGIC
+# MAGIC The **LLM-managed pattern** is what the Databricks app templates use in production.
+# MAGIC
+# MAGIC ### Three Memory Layers
+# MAGIC
+# MAGIC | Layer | Primitive | Scope | Example |
+# MAGIC |-------|-----------|-------|---------|
+# MAGIC | **Vector Search** | Databricks Vector Search | All users, static knowledge | "Company policy allows 15 days vacation" |
+# MAGIC | **Short-term** | `CheckpointSaver` | Single thread | "You asked about time off earlier in this chat" |
+# MAGIC | **Long-term** | `DatabricksStore` via tools | Across all sessions | "You work in Engineering" (remembered forever) |
 # MAGIC
 # MAGIC ### Key Concepts
 # MAGIC
-# MAGIC **Memory Types:**
-# MAGIC - `CheckpointSaver` → Short-term (conversation context within one thread)
-# MAGIC - `DatabricksStore` → Long-term (user facts across all sessions)
+# MAGIC **Memory Tools Pattern:**
+# MAGIC ```python
+# MAGIC @tool
+# MAGIC def get_user_memory(query: str, config: RunnableConfig) -> str:
+# MAGIC     store = config.get("configurable", {}).get("store")
+# MAGIC     results = store.search(namespace, query=query, limit=5)
+# MAGIC     ...
+# MAGIC ```
+# MAGIC
+# MAGIC **Store passed via config** — not a global variable:
+# MAGIC ```python
+# MAGIC config = {"configurable": {"store": store, "user_id": user_id, "thread_id": "..."}}
+# MAGIC agent.invoke({"messages": [...]}, config)
+# MAGIC ```
 # MAGIC
 # MAGIC **Namespace Patterns:**
 # MAGIC ```python
-# MAGIC # User-specific memory
-# MAGIC ("user_facts", sanitized_user_id)
-# MAGIC ("user_preferences", sanitized_user_id)
-# MAGIC
-# MAGIC # Team/shared memory
-# MAGIC ("team_knowledge", "engineering")
-# MAGIC
-# MAGIC # Time-based archiving
-# MAGIC ("user_facts", sanitized_user_id, "2024-Q1")
+# MAGIC ("user_memories", sanitized_user_id)       # per-user memories
+# MAGIC ("user_facts", sanitized_user_id)           # structured facts
+# MAGIC ("team_knowledge", "engineering")            # shared context
 # MAGIC ```
 # MAGIC
 # MAGIC **Production Considerations:**
-# MAGIC - Pass a stable `user_id` per person so long-term memory spans sessions
-# MAGIC - Implement data retention policies (GDPR compliance)
-# MAGIC - Allow users to view/delete their data
-# MAGIC - Add confidence scores to stored facts
+# MAGIC - Memory deletion enables GDPR/privacy compliance
+# MAGIC - Use `AsyncDatabricksStore` in async app contexts (FastAPI)
+# MAGIC - Add confidence scores or timestamps to stored facts
 # MAGIC - Implement access controls and audit logging
-# MAGIC - Consider temporal awareness (facts change over time)
-# MAGIC
-# MAGIC ### Complete Memory Architecture
-# MAGIC
-# MAGIC Your agent now has:
-# MAGIC - ✅ Document search (Vector Search)
-# MAGIC - ✅ Conversation memory (CheckpointSaver)
-# MAGIC - ✅ User personalization (DatabricksStore)
-# MAGIC - ✅ Thread isolation (separate conversations)
-# MAGIC - ✅ Cross-session memory (facts persist forever)
-# MAGIC
-# MAGIC ### Memory Comparison
-# MAGIC
-# MAGIC | Type | Example |
-# MAGIC |------|---------|
-# MAGIC | **Short-term** | "You mentioned 10 days earlier in this conversation" |
-# MAGIC | **Long-term** | "You work in Engineering department" (remembered forever) |
-# MAGIC | **Vector Search** | "Company policy allows 15 days vacation per year" |
+# MAGIC - Consider data retention policies for stale memories
 # MAGIC
 # MAGIC ## Next Steps
 # MAGIC
@@ -496,5 +665,6 @@ if new_interest not in interests:
 print("✓ Long-term memory tutorial complete!")
 print("\nYour agent now has:")
 print("  ✓ Short-term: Conversation context (CheckpointSaver)")
-print("  ✓ Long-term: User personalization (DatabricksStore)")
+print("  ✓ Long-term: LLM-managed personalization (DatabricksStore + memory tools)")
 print("  ✓ Knowledge: Document search (Vector Search)")
+print("  ✓ User control: Save, recall, and delete memories on demand")
