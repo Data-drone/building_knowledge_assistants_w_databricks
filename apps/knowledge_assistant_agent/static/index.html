@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Knowledge Assistant</title>
+<style>
+  :root {
+    --bg: #1b1b1f;
+    --surface: #27272a;
+    --surface2: #323236;
+    --border: #3f3f46;
+    --text: #fafafa;
+    --text-muted: #a1a1aa;
+    --accent: #3b82f6;
+    --accent-hover: #2563eb;
+    --user-bg: #1e3a5f;
+    --assistant-bg: #27272a;
+    --radius: 12px;
+    --max-w: 780px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    padding: 14px 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  header h1 {
+    font-size: 16px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  header h1::before {
+    content: "";
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #22c55e;
+  }
+
+  .settings-toggle {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+
+  .settings-toggle:hover { color: var(--text); border-color: var(--accent); }
+
+  .settings-bar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 20px;
+    display: none;
+    gap: 16px;
+    align-items: center;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+
+  .settings-bar.open { display: flex; }
+
+  .settings-bar label {
+    font-size: 12px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .settings-bar input {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-size: 13px;
+    width: 220px;
+  }
+
+  .settings-bar input:focus { outline: none; border-color: var(--accent); }
+
+  #messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .msg {
+    max-width: var(--max-w);
+    width: 100%;
+    margin: 0 auto;
+    display: flex;
+    gap: 12px;
+  }
+
+  .msg-avatar {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+    font-weight: 600;
+  }
+
+  .msg.user .msg-avatar { background: var(--accent); color: #fff; }
+  .msg.assistant .msg-avatar { background: var(--surface2); color: var(--accent); }
+
+  .msg-body {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .msg-role {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+    text-transform: capitalize;
+  }
+
+  .msg-text {
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text);
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+
+  .msg-text code {
+    background: var(--surface2);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 13px;
+  }
+
+  .msg-tools {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 6px;
+    padding: 6px 10px;
+    background: var(--surface2);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .msg-tools::before { content: "🔧"; }
+
+  .typing {
+    display: flex;
+    gap: 4px;
+    padding: 4px 0;
+  }
+
+  .typing span {
+    width: 6px; height: 6px;
+    background: var(--text-muted);
+    border-radius: 50%;
+    animation: bounce 1.4s infinite;
+  }
+
+  .typing span:nth-child(2) { animation-delay: 0.2s; }
+  .typing span:nth-child(3) { animation-delay: 0.4s; }
+
+  @keyframes bounce {
+    0%, 80%, 100% { transform: translateY(0); }
+    40% { transform: translateY(-6px); }
+  }
+
+  #chat-form {
+    padding: 16px 20px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .input-row {
+    max-width: var(--max-w);
+    margin: 0 auto;
+    display: flex;
+    gap: 10px;
+  }
+
+  #chat-input {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 12px 16px;
+    border-radius: var(--radius);
+    font-size: 14px;
+    resize: none;
+    font-family: inherit;
+    min-height: 44px;
+    max-height: 120px;
+  }
+
+  #chat-input:focus { outline: none; border-color: var(--accent); }
+  #chat-input::placeholder { color: var(--text-muted); }
+
+  #send-btn {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    padding: 0 20px;
+    border-radius: var(--radius);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  #send-btn:hover { background: var(--accent-hover); }
+  #send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .welcome {
+    text-align: center;
+    color: var(--text-muted);
+    margin: auto;
+    max-width: 420px;
+  }
+
+  .welcome h2 { font-size: 20px; color: var(--text); margin-bottom: 8px; }
+  .welcome p { font-size: 14px; line-height: 1.6; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Knowledge Assistant</h1>
+  <button class="settings-toggle" onclick="toggleSettings()">Settings</button>
+</header>
+
+<div class="settings-bar" id="settings-bar">
+  <label>User ID
+    <input id="user-id" placeholder="e.g. brian.law" />
+  </label>
+  <label>Thread ID
+    <input id="thread-id" readonly />
+  </label>
+  <button class="settings-toggle" onclick="newThread()">New Thread</button>
+</div>
+
+<div id="messages">
+  <div class="welcome">
+    <h2>Knowledge Assistant</h2>
+    <p>Ask questions about company policies, or just chat. Set your User ID in Settings to enable long-term memory across sessions.</p>
+  </div>
+</div>
+
+<form id="chat-form" onsubmit="send(event)">
+  <div class="input-row">
+    <textarea id="chat-input" placeholder="Type a message..." rows="1"></textarea>
+    <button type="submit" id="send-btn">Send</button>
+  </div>
+</form>
+
+<script>
+const messagesEl = document.getElementById("messages");
+const inputEl = document.getElementById("chat-input");
+const sendBtn = document.getElementById("send-btn");
+const threadIdEl = document.getElementById("thread-id");
+const userIdEl = document.getElementById("user-id");
+
+let threadId = "session-" + crypto.randomUUID().slice(0, 8);
+threadIdEl.value = threadId;
+
+const stored = localStorage.getItem("ka_user_id");
+if (stored) userIdEl.value = stored;
+userIdEl.addEventListener("change", () => {
+  localStorage.setItem("ka_user_id", userIdEl.value);
+});
+
+inputEl.addEventListener("input", () => {
+  inputEl.style.height = "auto";
+  inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + "px";
+});
+
+inputEl.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    document.getElementById("chat-form").requestSubmit();
+  }
+});
+
+function toggleSettings() {
+  document.getElementById("settings-bar").classList.toggle("open");
+}
+
+function newThread() {
+  threadId = "session-" + crypto.randomUUID().slice(0, 8);
+  threadIdEl.value = threadId;
+  messagesEl.innerHTML = `
+    <div class="welcome">
+      <h2>Knowledge Assistant</h2>
+      <p>New thread started. Ask questions about company policies, or just chat.</p>
+    </div>`;
+}
+
+function addMessage(role, text, toolCalls) {
+  const welcome = messagesEl.querySelector(".welcome");
+  if (welcome) welcome.remove();
+
+  const div = document.createElement("div");
+  div.className = `msg ${role}`;
+
+  const avatar = role === "user" ? "Y" : "A";
+  let html = `
+    <div class="msg-avatar">${avatar}</div>
+    <div class="msg-body">
+      <div class="msg-role">${role}</div>
+      <div class="msg-text">${escapeHtml(text)}</div>`;
+
+  if (toolCalls && toolCalls.length > 0) {
+    const names = toolCalls.map(t => t.name).join(", ");
+    html += `<div class="msg-tools">Used: ${escapeHtml(names)}</div>`;
+  }
+
+  html += `</div>`;
+  div.innerHTML = html;
+  messagesEl.appendChild(div);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+  return div;
+}
+
+function addTyping() {
+  const welcome = messagesEl.querySelector(".welcome");
+  if (welcome) welcome.remove();
+
+  const div = document.createElement("div");
+  div.className = "msg assistant";
+  div.id = "typing";
+  div.innerHTML = `
+    <div class="msg-avatar">A</div>
+    <div class="msg-body">
+      <div class="msg-role">assistant</div>
+      <div class="typing"><span></span><span></span><span></span></div>
+    </div>`;
+  messagesEl.appendChild(div);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function removeTyping() {
+  const el = document.getElementById("typing");
+  if (el) el.remove();
+}
+
+function escapeHtml(str) {
+  const d = document.createElement("div");
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+async function send(e) {
+  e.preventDefault();
+  const text = inputEl.value.trim();
+  if (!text) return;
+
+  inputEl.value = "";
+  inputEl.style.height = "auto";
+  sendBtn.disabled = true;
+
+  addMessage("user", text);
+  addTyping();
+
+  const body = {
+    input: [{ role: "user", content: text }],
+    custom_inputs: { thread_id: threadId }
+  };
+
+  const uid = userIdEl.value.trim();
+  if (uid) body.custom_inputs.user_id = uid;
+
+  try {
+    const res = await fetch("/invocations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    removeTyping();
+
+    if (!res.ok) {
+      const errText = await res.text();
+      addMessage("assistant", `Error ${res.status}: ${errText}`);
+      return;
+    }
+
+    const data = await res.json();
+    const output = data.output || [];
+    const toolCalls = output.filter(i => i.type === "function_call");
+    const messages = output.filter(i => i.type === "message");
+
+    if (messages.length > 0) {
+      const last = messages[messages.length - 1];
+      const content = (last.content || [])
+        .filter(c => c.type === "output_text")
+        .map(c => c.text)
+        .join("\n");
+      addMessage("assistant", content || "(empty response)", toolCalls);
+    } else {
+      addMessage("assistant", "(no message in response)", toolCalls);
+    }
+  } catch (err) {
+    removeTyping();
+    addMessage("assistant", `Request failed: ${err.message}`);
+  } finally {
+    sendBtn.disabled = false;
+    inputEl.focus();
+  }
+}
+</script>
+</body>
+</html>
