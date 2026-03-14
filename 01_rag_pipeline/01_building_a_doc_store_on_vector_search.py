@@ -57,7 +57,7 @@ from langgraph.graph import StateGraph, MessagesState, END
 from langgraph.prebuilt import ToolNode
 
 # Configuration
-LLM_ENDPOINT = "databricks-claude-sonnet-4-5"
+LLM_ENDPOINT = "databricks-claude-sonnet-4-6"
 CATALOG = "agent_bootcamp"
 SCHEMA = "knowledge_assistant"
 DOCS_VOLUME = f"/Volumes/{CATALOG}/{SCHEMA}/docs"

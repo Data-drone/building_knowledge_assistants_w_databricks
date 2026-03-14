@@ -41,6 +41,7 @@ dbutils.library.restartPython()
 # COMMAND ----------
 
 import mlflow
+import uuid
 from mlflow.genai.judges import make_judge
 from typing import Literal
 from databricks_langchain import ChatDatabricks, CheckpointSaver
@@ -56,19 +57,29 @@ import pandas as pd
 # Configuration
 CATALOG = "agent_bootcamp"
 SCHEMA = "knowledge_assistant"
-LLM_ENDPOINT = "databricks-claude-sonnet-4-5"
-LAKEBASE_PROJECT = "knowledge-assistant-state"
+LLM_ENDPOINT = "databricks-claude-sonnet-4-6"
+LAKEBASE_INSTANCE_NAME = None
+LAKEBASE_AUTOSCALING_PROJECT = "knowledge-assistant-state"
+LAKEBASE_AUTOSCALING_BRANCH = "production"
 
 VECTOR_INDEX = f"{CATALOG}.{SCHEMA}.policy_index"
-ENDPOINT_NAME = "agent_bootcamp_endpoint"
+ENDPOINT_NAME = "one-env-shared-endpoint-15"
 
 # Set experiment
 experiment_name = f"/Users/{dbutils.notebook.entry_point.getDbutils().notebook().getContext().userName().get()}/agent_bootcamp_evaluation"
 mlflow.set_experiment(experiment_name)
 mlflow.tracing.enable()
 
+
+def lakebase_target() -> str:
+    if LAKEBASE_INSTANCE_NAME:
+        return LAKEBASE_INSTANCE_NAME
+    return f"{LAKEBASE_AUTOSCALING_PROJECT}/{LAKEBASE_AUTOSCALING_BRANCH}"
+
 print(f"✓ Configuration loaded")
 print(f"  Experiment: {experiment_name}")
+
+EVALUATION_RUN_ID = uuid.uuid4().hex[:8]
 
 # COMMAND ----------
 
@@ -109,18 +120,19 @@ workflow.add_conditional_edges("agent", should_continue, {"tools": "tools", END:
 workflow.add_edge("tools", "agent")
 
 # Add CheckpointSaver
-from databricks.sdk import WorkspaceClient
-w = WorkspaceClient()
-target_instance = next((inst for inst in w.database.list_database_instances() if inst.name == LAKEBASE_PROJECT), None)
-if not target_instance:
-    raise Exception(f"Lakebase instance '{LAKEBASE_PROJECT}' not found.")
-
-checkpointer = CheckpointSaver(instance_name=LAKEBASE_PROJECT)
+checkpointer = CheckpointSaver(
+    instance_name=LAKEBASE_INSTANCE_NAME,
+    project=LAKEBASE_AUTOSCALING_PROJECT,
+    branch=LAKEBASE_AUTOSCALING_BRANCH,
+)
 try:
     checkpointer.setup()
 except Exception as e:
     if "already exists" not in str(e).lower():
-        raise
+        raise Exception(
+            f"CheckpointSaver setup failed for {lakebase_target()}. "
+            "Verify the Lakebase target exists and your role has CREATE access on schema public."
+        ) from e
 
 agent = workflow.compile(checkpointer=checkpointer)
 
@@ -264,9 +276,10 @@ except Exception as e:
 
 # Prediction function with tracing
 @mlflow.trace
-def predict(question: str) -> str:
+def predict(question: str, question_idx: int) -> str:
     """Generate agent response for a question."""
-    config = {"configurable": {"thread_id": f"eval-{hash(question)}"}}
+    thread_id = f"eval-{EVALUATION_RUN_ID}-{question_idx:03d}"
+    config = {"configurable": {"thread_id": thread_id}}
     result = agent.invoke(
         {"messages": [HumanMessage(content=question)]},
         config=config
@@ -277,7 +290,7 @@ def predict(question: str) -> str:
 print("Generating predictions...")
 predictions = []
 for idx, row in eval_data.iterrows():
-    pred = predict(row["question"])
+    pred = predict(row["question"], idx)
     predictions.append(pred)
     print(f"  {idx+1}/{len(eval_data)} complete")
 

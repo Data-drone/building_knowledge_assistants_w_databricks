@@ -162,7 +162,7 @@ from langgraph.graph import StateGraph, MessagesState, END
 from langgraph.prebuilt import ToolNode
 
 # Configuration
-LLM_ENDPOINT = "databricks-claude-sonnet-4-5"
+LLM_ENDPOINT = "databricks-claude-sonnet-4-6"
 
 # Initialize LLM
 llm = ChatDatabricks(endpoint=LLM_ENDPOINT, temperature=0.1)
@@ -940,7 +940,7 @@ from langchain_core.messages import HumanMessage
 langchain_tools = mcp_client.to_langchain_tools()
 
 # Create agent (simplified example)
-llm = ChatDatabricks(endpoint="databricks-claude-sonnet-4-5")
+llm = ChatDatabricks(endpoint="databricks-claude-sonnet-4-6")
 llm_with_tools = llm.bind_tools(langchain_tools)
 
 # Test

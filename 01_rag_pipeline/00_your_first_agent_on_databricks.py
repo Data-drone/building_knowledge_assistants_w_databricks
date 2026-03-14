@@ -27,7 +27,7 @@ from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.graph import StateGraph, MessagesState, END
 
 # Configuration
-LLM_ENDPOINT = "databricks-claude-sonnet-4-5"
+LLM_ENDPOINT = "databricks-claude-sonnet-4-6"
 
 # Setup MLflow
 mlflow.langchain.autolog()

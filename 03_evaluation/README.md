@@ -13,8 +13,10 @@ This module teaches you to add systematic evaluation and observability to AI age
 ### Required
 - **Vector Search index** available (from Module 01)
   - Expected index: `{CATALOG}.{SCHEMA}.policy_index`
-- **Lakebase instance** created (for CheckpointSaver)
-- LLM endpoint available (`databricks-claude-sonnet-4-5` or similar)
+- **Lakebase short-term memory target** created (for CheckpointSaver)
+  - Provisioned: `LAKEBASE_INSTANCE_NAME`
+  - Autoscaling: `LAKEBASE_AUTOSCALING_PROJECT` + `LAKEBASE_AUTOSCALING_BRANCH`
+- LLM endpoint available (`databricks-claude-sonnet-4-6` or similar)
 
 ### Recommended
 - Completed [Module 02 (Memory)](../02_memory/README.md) - This module builds directly on the memory-enabled agent
@@ -86,10 +88,10 @@ After completing these notebooks, you'll understand:
 
 ## Technical Stack
 
-- **LLM**: Databricks LLM endpoints (Claude Sonnet 4.5)
+- **LLM**: Databricks LLM endpoints (Claude Sonnet 4.6)
 - **Orchestration**: LangGraph
 - **Vector Search**: Databricks Vector Search (for RAG)
-- **Memory**: CheckpointSaver (from Module 02)
+- **Memory**: CheckpointSaver (from Module 02 short-term memory flow)
 - **Tracing**: MLflow Tracing (OpenTelemetry-compatible)
 - **Evaluation**: MLflow Evaluate with built-in + custom metrics
 
@@ -182,6 +184,10 @@ Deploy → Trace → Evaluate → Human Feedback → Refine Judges → Repeat
 ### Tracing
 - **Issue**: Traces not appearing
 - **Fix**: Ensure `mlflow.tracing.enable()` is called before agent execution
+
+### CheckpointSaver
+- **Issue**: Checkpoint tables fail to initialize on Databricks Apps
+- **Fix**: Ensure the app role has `USAGE, CREATE` on schema `public` and table permissions for `checkpoint_*`
 
 ### Evaluation
 - **Issue**: Need to pre-generate predictions before evaluation

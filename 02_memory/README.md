@@ -8,14 +8,19 @@ This module teaches you to add memory to AI agents using Databricks primitives:
 1. **Notebook 01** (20 min): Short-term memory with CheckpointSaver - Multi-turn conversations
 2. **Notebook 02** (25 min): Long-term memory with DatabricksStore - Cross-session personalization
 
+These notebooks align with Databricks' latest stateful agent guidance:
+[AI agent memory](https://docs.databricks.com/aws/en/generative-ai/agent-framework/stateful-agents)
+
 ## Prerequisites
 
 ### Required
 - **Vector Search index** available (from Module 01 or workspace setup)
   - Expected index: `{CATALOG}.{SCHEMA}.policy_index`
   - If you haven't set this up, see [Module 01](../01_rag_pipeline/README.md) or workspace setup guide
-- **Lakebase instance** created (usually done in workspace setup)
-- LLM endpoint available (`databricks-claude-sonnet-4-5` or similar)
+- **Lakebase target** created (usually done in workspace setup)
+  - Provisioned: `LAKEBASE_INSTANCE_NAME`
+  - Autoscaling: `LAKEBASE_AUTOSCALING_PROJECT` + `LAKEBASE_AUTOSCALING_BRANCH`
+- LLM endpoint available (`databricks-claude-sonnet-4-6` or similar)
 
 ### Recommended
 - Completed [Module 01 (RAG Pipeline)](../01_rag_pipeline/README.md) to understand the RAG agent architecture
@@ -34,6 +39,12 @@ This module teaches you to add memory to AI agents using Databricks primitives:
 - Multi-turn conversations with context
 - "Before/after" demonstration of memory value
 
+**Production note**: Use a stable `thread_id` per conversation when you deploy
+the agent on Databricks Apps. Reusing the same `thread_id` resumes the session;
+changing it starts a fresh conversation.
+The short-term examples in this repo now support either a provisioned Lakebase
+instance or an autoscaling Lakebase project/branch.
+
 **Time**: 20 minutes
 
 ---
@@ -48,6 +59,7 @@ This module teaches you to add memory to AI agents using Databricks primitives:
 - Combining short-term + long-term memory
 - Personalization across sessions
 - Memory management and privacy
+- Stable `user_id` patterns for cross-session recall
 
 **Time**: 25 minutes
 
@@ -71,7 +83,7 @@ After completing these notebooks, you'll understand:
 **For production features** (covered in later modules):
 - **Module 03**: Evaluation and observability
 - **Module 04**: Multi-tool agents (Genie, UC Functions)
-- **Module 05**: Deployment to Databricks Apps
+- **Module 05**: Deployment to Databricks Apps with explicit `thread_id` handling
 
 ---
 
@@ -90,7 +102,7 @@ After completing these notebooks, you'll understand:
 
 ## Technical Stack
 
-- **LLM**: Databricks LLM endpoints (Claude Sonnet 4.5)
+- **LLM**: Databricks LLM endpoints (Claude Sonnet 4.6)
 - **Orchestration**: LangGraph
 - **Vector Search**: Databricks Vector Search (for RAG)
 - **Short-term memory**: CheckpointSaver (Lakebase PostgreSQL)
@@ -106,12 +118,14 @@ After completing these notebooks, you'll understand:
 - **Content**: Full message history, tool outputs
 - **Lifetime**: Duration of conversation (minutes to hours)
 - **Use case**: Multi-turn conversations within one session
+- **Config**: either `LAKEBASE_INSTANCE_NAME` or `LAKEBASE_AUTOSCALING_PROJECT` + `LAKEBASE_AUTOSCALING_BRANCH`
 
 ### Long-Term Memory (DatabricksStore)
 - **Scope**: Across threads, sessions, users
 - **Content**: Facts, preferences, user profiles
 - **Lifetime**: Indefinite (days to years)
 - **Use case**: Personalization, learning from past interactions
+- **Config**: same Lakebase target pattern as short-term memory, plus embedding endpoint settings
 
 ---
 
@@ -120,6 +134,8 @@ After completing these notebooks, you'll understand:
 - Check MLflow traces for debugging
 - Review error messages (version pins prevent most issues)
 - Ensure Vector Search index and Lakebase are properly configured
+- On Databricks Apps, ensure the app role has `CREATE` on schema `public` for checkpoint tables
+- For long-term memory, also grant access to `public.store`, `public.store_vectors`, `public.store_migrations`, and `public.vector_migrations`
 - See Module 01 for Vector Search setup details
 
 ---

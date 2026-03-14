@@ -75,6 +75,9 @@ Build your first document-based Q&A agent.
 ### Module 2: Memory (60 min)
 Add conversation memory for multi-turn interactions.
 
+This module maps directly to Databricks' latest stateful agent guidance:
+[AI agent memory](https://docs.databricks.com/aws/en/generative-ai/agent-framework/stateful-agents)
+
 | Notebook | Topics | Duration |
 |----------|--------|----------|
 | [01_short_term_memory.py](02_memory/01_short_term_memory.py) | Checkpoint saver, thread memory, multi-turn conversations | 20 min |
@@ -213,6 +216,11 @@ Managed PostgreSQL with:
 - **Checkpointer**: Short-term conversation memory
 - **Store**: Long-term facts and preferences
 
+For stateful Apps, pass a stable `thread_id` per conversation so short-term
+memory stays scoped to one session.
+The deployed app in this repo uses the autoscaling Lakebase target
+`knowledge-assistant-state/production` rather than a legacy provisioned instance.
+
 ### MLflow 3.0 Evaluation
 - **Scorers**: Built-in (Correctness, Groundedness, Guidelines)
 - **make_judge()**: Create custom judges with natural language
@@ -241,16 +249,14 @@ By the end of this bootcamp, you'll have built a production-ready **Internal Kno
 ```
 databricks_agent_bootcamp/
 ├── config.py                       # Shared configuration
-├── src/
-│   └── agent.py                    # ResponsesAgent implementation
-│
 ├── 00_foundations/                 # Platform basics
 ├── 01_rag_pipeline/                # Vector Search + documents
 ├── 02_memory/                      # Lakebase checkpointing
 ├── 03_evaluation/                  # MLflow judges + scorers
 ├── 04_mcp_tool_integration/        # Genie + custom MCP tools
 ├── 05_deployment/                  # Production monitoring + eval
-└── apps/                           # Databricks Apps source code
+└── apps/
+    └── knowledge_assistant_agent/  # Canonical Databricks Apps runtime
 ```
 
 ---
@@ -263,7 +269,13 @@ databricks_agent_bootcamp/
 - Test with **small eval datasets** first
 
 ### Production
-- Deploy via **Databricks Apps** for app-hosted `/invocations`
+- The bootcamp's only deployment path is **Databricks Apps**
+- Deploy the agent from `apps/knowledge_assistant_agent`
+- Use the app-hosted `/invocations` endpoint for validation and testing
+- Pass `custom_inputs.thread_id` on every request to preserve short-term memory
+- Configure short-term memory with either `LAKEBASE_INSTANCE_NAME` or the autoscaling pair
+  `LAKEBASE_AUTOSCALING_PROJECT` + `LAKEBASE_AUTOSCALING_BRANCH`
+- Pass a stable user identity for long-term memory so preferences persist across sessions
 - Enable **MLflow tracing** for monitoring
 - Use **connection pooling** (min_size=2) to avoid cold starts
 - Configure **online evaluation** for quality monitoring
@@ -289,6 +301,17 @@ databricks_agent_bootcamp/
 - First connection after idle has 20-30s cold start
 - Use connection pooling (min_size >= 2) to keep warm
 
+**CheckpointSaver setup fails on Databricks Apps**
+- For autoscaling Lakebase, configure `LAKEBASE_AUTOSCALING_PROJECT` and `LAKEBASE_AUTOSCALING_BRANCH`
+- Ensure the app service principal has `USAGE, CREATE` on schema `public`
+- Ensure checkpoint tables in `public` grant `SELECT, INSERT, UPDATE` to the app role
+
+**DatabricksStore setup fails on Databricks Apps**
+- Use the same Lakebase autoscaling project/branch settings as short-term memory
+- Ensure the app role can create and update `public.store`, `public.store_vectors`,
+  `public.store_migrations`, and `public.vector_migrations`
+- Verify your embedding endpoint and dimensions match the store configuration
+
 **MCP tools not found**
 - Verify MCP URL format is correct
 - Check Unity Catalog permissions on underlying assets
@@ -303,6 +326,7 @@ databricks_agent_bootcamp/
 
 ## 📚 Additional Resources
 
+- [Databricks AI agent memory](https://docs.databricks.com/aws/en/generative-ai/agent-framework/stateful-agents)
 - [Databricks Agent Framework Documentation](https://docs.databricks.com/en/generative-ai/agent-framework/author-agent)
 - [MLflow 3.0 Evaluation Guide](https://mlflow.org/docs/latest/evaluation/)
 - [LangGraph Documentation](https://langchain-ai.github.io/langgraph/)

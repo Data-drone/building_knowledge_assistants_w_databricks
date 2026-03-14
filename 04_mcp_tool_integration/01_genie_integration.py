@@ -57,10 +57,10 @@ mlflow.tracing.enable()
 # Configuration - Use the sample data created in Module 00
 CATALOG = "agent_bootcamp"
 SCHEMA = "knowledge_assistant"
-LLM_ENDPOINT = "databricks-claude-sonnet-4-5"
+LLM_ENDPOINT = "databricks-claude-sonnet-4-6"
 LAKEBASE_PROJECT = "knowledge-assistant-state"
 VECTOR_INDEX = f"{CATALOG}.{SCHEMA}.policy_index"
-ENDPOINT_NAME = "agent_bootcamp_endpoint"
+ENDPOINT_NAME = "one-env-shared-endpoint-15"
 
 print("✅ Configuration loaded")
 
@@ -229,7 +229,7 @@ from databricks.sdk import WorkspaceClient
 w = WorkspaceClient()
 
 # SQL Warehouse configuration
-SQL_WAREHOUSE_ID = "your-warehouse-id"  # Update with your warehouse ID
+SQL_WAREHOUSE_ID = "148ccb90800933a1"  # Shared Endpoint
 
 @tool
 def execute_sql_query(query: str) -> str:
@@ -420,30 +420,18 @@ TABLES = [
 print("="*80)
 print("GENIE SPACE SETUP")
 print("="*80)
-print("\n📋 Manual Setup Steps:")
-print("1. Go to Databricks UI → Genie (in left sidebar)")
-print("2. Click 'Create Space'")
-print("3. Configure:")
-print("   - Name: 'HR Knowledge Assistant'")
-print("   - Description: 'Employee and leave data for HR queries'")
-print("4. Add tables:")
+print("\nUsing the preconfigured Genie space for this workspace.")
+print("If you run this notebook elsewhere, create a Genie space with these tables:")
 for table in TABLES:
     print(f"   - {table}")
-print("5. Save and copy the space_id from the URL")
-print("   (Format: https://.../genie/spaces/01234567-89ab-cdef...)")
-print("6. Update GENIE_SPACE_ID variable in next cell")
 print("="*80)
 
 # COMMAND ----------
 
-# TODO: After creating Genie space in UI, paste the space_id here
-GENIE_SPACE_ID = "your-genie-space-id-here"  # Replace with actual space_id
+# Preconfigured Genie space for the bootcamp employee HR tables in this workspace.
+GENIE_SPACE_ID = "01f11fab4ab214e882b51c116b9945bc"
 
-if GENIE_SPACE_ID == "your-genie-space-id-here":
-    print("⚠️  WARNING: Please update GENIE_SPACE_ID with your actual space_id!")
-    print("💡 Steps 8-10 will be skipped until you do.")
-else:
-    print(f"✅ Using Genie space: {GENIE_SPACE_ID}")
+print(f"✅ Using Genie space: {GENIE_SPACE_ID}")
 
 # COMMAND ----------
 
@@ -473,32 +461,41 @@ def query_employee_data(question: str) -> str:
         Analysis results with explanation
     """
     try:
-        # Send message to Genie
-        response = w.genie.create_message(
+        # Start a fresh Genie conversation for each question using the current SDK API.
+        message = w.genie.start_conversation_and_wait(
             space_id=GENIE_SPACE_ID,
             content=question
         )
 
-        # Get the result
-        message = w.genie.get_message(
-            space_id=GENIE_SPACE_ID,
-            conversation_id=response.conversation_id,
-            message_id=response.id
-        )
-
         result = f"🔍 Analysis for: {question}\n\n"
+        sql_query = None
+        answer_text = None
+        follow_up_questions = []
+
+        for attachment in message.attachments or []:
+            if getattr(attachment, "query", None) and getattr(attachment.query, "query", None):
+                sql_query = attachment.query.query
+            if getattr(attachment, "text", None) and getattr(attachment.text, "content", None):
+                answer_text = attachment.text.content
+            if (
+                getattr(attachment, "suggested_questions", None)
+                and getattr(attachment.suggested_questions, "questions", None)
+            ):
+                follow_up_questions = attachment.suggested_questions.questions
 
         # Include generated SQL for transparency
-        if message.attachments and message.attachments[0].query:
-            sql_query = message.attachments[0].query.query
+        if sql_query:
             result += f"📝 SQL Query:\n{sql_query}\n\n"
 
         # Include results
-        if message.attachments and message.attachments[0].text:
-            result += f"📊 Results:\n{message.attachments[0].text.content}\n\n"
+        if answer_text:
+            result += f"📊 Results:\n{answer_text}\n\n"
 
-        # Include explanation
-        result += f"💡 Explanation:\n{message.content}"
+        if follow_up_questions:
+            result += "💡 Suggested follow-up questions:\n"
+            result += "\n".join(f"- {question}" for question in follow_up_questions)
+        elif not answer_text:
+            result += "💡 Genie completed the query, but did not return a text summary."
 
         return result
 

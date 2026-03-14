@@ -34,7 +34,7 @@ REGION = "eastus"
 # ==============================================================================
 
 # Default LLM endpoint for agent reasoning
-LLM_ENDPOINT = "databricks-claude-sonnet-4-5"
+LLM_ENDPOINT = "databricks-claude-sonnet-4-6"
 
 # Embedding endpoint for vector search
 EMBEDDING_ENDPOINT = "databricks-gte-large-en"

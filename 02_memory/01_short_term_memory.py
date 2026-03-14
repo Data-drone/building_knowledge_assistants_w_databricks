@@ -13,7 +13,7 @@
 # MAGIC
 # MAGIC ## Prerequisites
 # MAGIC - Vector Search index: `{CATALOG}.{SCHEMA}.policy_index`
-# MAGIC - Lakebase instance created
+# MAGIC - Lakebase target created
 # MAGIC - LLM endpoint available
 # MAGIC
 # MAGIC ## Estimated Time
@@ -49,17 +49,25 @@ import uuid_utils
 # Configuration - Update these for your environment
 CATALOG = "agent_bootcamp"
 SCHEMA = "knowledge_assistant"
-LLM_ENDPOINT = "databricks-claude-sonnet-4-5"
-LAKEBASE_INSTANCE_NAME = "knowledge-assistant-state"
+LLM_ENDPOINT = "databricks-claude-sonnet-4-6"
+LAKEBASE_INSTANCE_NAME = None
+LAKEBASE_AUTOSCALING_PROJECT = "knowledge-assistant-state"
+LAKEBASE_AUTOSCALING_BRANCH = "production"
 
 # Derived values
 VECTOR_INDEX = f"{CATALOG}.{SCHEMA}.policy_index"
 #ENDPOINT_NAME = "agent_bootcamp_endpoint"
 ENDPOINT_NAME = "one-env-shared-endpoint-15"
 
+
+def lakebase_target() -> str:
+    if LAKEBASE_INSTANCE_NAME:
+        return LAKEBASE_INSTANCE_NAME
+    return f"{LAKEBASE_AUTOSCALING_PROJECT}/{LAKEBASE_AUTOSCALING_BRANCH}"
+
 print(f"✓ Configuration loaded")
 print(f"  Vector Index: {VECTOR_INDEX}")
-print(f"  Lakebase Instance: {LAKEBASE_INSTANCE_NAME}")
+print(f"  Lakebase Target: {lakebase_target()}")
 
 
 def resolve_thread_id(custom_thread_id: str | None = None, conversation_id: str | None = None) -> str:
@@ -166,20 +174,14 @@ print("\n→ Agent has no context from Turn 1. Each invoke() is independent.")
 
 # COMMAND ----------
 
-from databricks.sdk import WorkspaceClient
-
-# Verify Lakebase instance exists
-w = WorkspaceClient()
-instances = list(w.database.list_database_instances())
-
-target_instance = next((inst for inst in instances if inst.name == LAKEBASE_INSTANCE_NAME), None)
-if not target_instance:
-    raise Exception(f"Lakebase instance '{LAKEBASE_INSTANCE_NAME}' not found. Please create it first.")
-
-print(f"✓ Lakebase instance '{LAKEBASE_INSTANCE_NAME}' found (State: {target_instance.state})")
+print(f"Using Lakebase target: {lakebase_target()}")
 
 # Initialize CheckpointSaver
-checkpointer = CheckpointSaver(instance_name=LAKEBASE_INSTANCE_NAME)
+checkpointer = CheckpointSaver(
+    instance_name=LAKEBASE_INSTANCE_NAME,
+    project=LAKEBASE_AUTOSCALING_PROJECT,
+    branch=LAKEBASE_AUTOSCALING_BRANCH,
+)
 
 try:
     checkpointer.setup()
@@ -188,7 +190,10 @@ except Exception as e:
     if "already exists" in str(e).lower():
         print("✓ CheckpointSaver tables already exist (reusing)")
     else:
-        raise
+        raise Exception(
+            f"CheckpointSaver setup failed for {lakebase_target()}. "
+            "Verify the Lakebase target exists and your role has CREATE access on schema public."
+        ) from e
 
 # Compile with memory
 agent_with_memory = workflow.compile(checkpointer=checkpointer)

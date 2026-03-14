@@ -14,7 +14,7 @@
 # MAGIC ## Prerequisites
 # MAGIC - Completed Notebook 01 (short-term memory) OR understand checkpointed RAG agents
 # MAGIC - Vector Search index available
-# MAGIC - Lakebase instance created
+# MAGIC - Lakebase target created
 # MAGIC
 # MAGIC ## Estimated Time
 # MAGIC 20 minutes
@@ -50,8 +50,10 @@ from datetime import datetime
 # Configuration - Update these for your environment
 CATALOG = "agent_bootcamp"
 SCHEMA = "knowledge_assistant"
-LLM_ENDPOINT = "databricks-claude-sonnet-4-5"
-LAKEBASE_INSTANCE_NAME = "knowledge-assistant-state"
+LLM_ENDPOINT = "databricks-claude-sonnet-4-6"
+LAKEBASE_INSTANCE_NAME = None
+LAKEBASE_AUTOSCALING_PROJECT = "knowledge-assistant-state"
+LAKEBASE_AUTOSCALING_BRANCH = "production"
 EMBEDDING_ENDPOINT = "databricks-gte-large-en"
 EMBEDDING_DIMS = 1024
 
@@ -65,7 +67,14 @@ def sanitize_namespace_id(user_id: str) -> str:
     """DatabricksStore doesn't allow periods in namespace labels."""
     return user_id.replace(".", "_").replace("@", "_at_")
 
+
+def lakebase_target() -> str:
+    if LAKEBASE_INSTANCE_NAME:
+        return LAKEBASE_INSTANCE_NAME
+    return f"{LAKEBASE_AUTOSCALING_PROJECT}/{LAKEBASE_AUTOSCALING_BRANCH}"
+
 print(f"✓ Configuration loaded")
+print(f"  Lakebase Target: {lakebase_target()}")
 
 
 def get_session_id(custom_inputs: dict | None = None, conversation_id: str | None = None) -> str | None:
@@ -145,19 +154,19 @@ workflow.add_conditional_edges("agent", should_continue, {"tools": "tools", END:
 workflow.add_edge("tools", "agent")
 
 # Add CheckpointSaver
-from databricks.sdk import WorkspaceClient
-w = WorkspaceClient()
-instances = list(w.database.list_database_instances())
-target_instance = next((inst for inst in instances if inst.name == LAKEBASE_INSTANCE_NAME), None)
-if not target_instance:
-    raise Exception(f"Lakebase instance '{LAKEBASE_INSTANCE_NAME}' not found.")
-
-checkpointer = CheckpointSaver(instance_name=LAKEBASE_INSTANCE_NAME)
+checkpointer = CheckpointSaver(
+    instance_name=LAKEBASE_INSTANCE_NAME,
+    project=LAKEBASE_AUTOSCALING_PROJECT,
+    branch=LAKEBASE_AUTOSCALING_BRANCH,
+)
 try:
     checkpointer.setup()
 except Exception as e:
     if "already exists" not in str(e).lower():
-        raise
+        raise Exception(
+            f"CheckpointSaver setup failed for {lakebase_target()}. "
+            "Verify the Lakebase target exists and your role has CREATE access on schema public."
+        ) from e
 
 agent_with_checkpointer = workflow.compile(checkpointer=checkpointer)
 
@@ -201,7 +210,13 @@ print("\n→ Agent doesn't remember Engineering department (different thread)")
 # COMMAND ----------
 
 # Initialize DatabricksStore for long-term memory
-store = DatabricksStore(instance_name=LAKEBASE_INSTANCE_NAME)
+store = DatabricksStore(
+    instance_name=LAKEBASE_INSTANCE_NAME,
+    project=LAKEBASE_AUTOSCALING_PROJECT,
+    branch=LAKEBASE_AUTOSCALING_BRANCH,
+    embedding_endpoint=EMBEDDING_ENDPOINT,
+    embedding_dims=EMBEDDING_DIMS,
+)
 try:
     store.setup()
     print("✓ DatabricksStore tables initialized")
@@ -209,7 +224,10 @@ except Exception as e:
     if "already exists" in str(e).lower():
         print("✓ DatabricksStore tables already exist (reusing)")
     else:
-        raise
+        raise Exception(
+            f"DatabricksStore setup failed for {lakebase_target()}. "
+            "Verify the Lakebase target exists and your role has CREATE access on schema public."
+        ) from e
 
 print("✓ DatabricksStore ready")
 print(f"  Embedding endpoint: {EMBEDDING_ENDPOINT} ({EMBEDDING_DIMS} dims)")
@@ -287,7 +305,7 @@ def call_agent_with_store(state: MessagesState):
     """Agent logic that reads from Store for personalization."""
     messages = state["messages"]
 
-    # Extract user_id (in production, from authentication)
+    # Extract user_id (in production, pass a stable user identity per person)
     user_id = "alice@company.com"  # Hardcoded for demo
     sanitized_user_id = sanitize_namespace_id(user_id)
 
@@ -445,6 +463,7 @@ if new_interest not in interests:
 # MAGIC ```
 # MAGIC
 # MAGIC **Production Considerations:**
+# MAGIC - Pass a stable `user_id` per person so long-term memory spans sessions
 # MAGIC - Implement data retention policies (GDPR compliance)
 # MAGIC - Allow users to view/delete their data
 # MAGIC - Add confidence scores to stored facts

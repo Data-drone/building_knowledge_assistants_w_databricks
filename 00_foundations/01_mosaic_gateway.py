@@ -129,7 +129,7 @@ print(f"Response: {response.content}")
 
 # Test models
 test_models = [
-    "databricks-claude-sonnet-4-5",  # High capability
+    "databricks-claude-sonnet-4-6",  # High capability
     "databricks-claude-haiku-4",     # Fast, efficient
     "databricks-llama-3-3-70b",      # Open source
 ]
@@ -167,7 +167,7 @@ for model_name in test_models:
 # MAGIC
 # MAGIC ### Pay-Per-Token (Default)
 # MAGIC ```python
-# MAGIC llm = ChatDatabricks(endpoint="databricks-claude-sonnet-4-5")
+# MAGIC llm = ChatDatabricks(endpoint="databricks-claude-sonnet-4-6")
 # MAGIC # Automatically uses pay-per-token pricing
 # MAGIC # Billed based on input/output tokens consumed
 # MAGIC ```

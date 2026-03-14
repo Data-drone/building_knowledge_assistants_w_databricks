@@ -11,7 +11,7 @@ This module teaches you to build AI agents using Databricks primitives:
 ## Prerequisites
 
 - Access to Databricks workspace
-- LLM endpoint available (`databricks-claude-sonnet-4-5` or similar)
+- LLM endpoint available (`databricks-claude-sonnet-4-6` or similar)
 - For Notebook 01: Unity Catalog volume with sample documents
 
 ## Learning Path
@@ -79,7 +79,7 @@ After completing these notebooks, you'll understand:
 
 ## Technical Stack
 
-- **LLM**: Databricks LLM endpoints (Claude Sonnet 4.5)
+- **LLM**: Databricks LLM endpoints (Claude Sonnet 4.6)
 - **Orchestration**: LangGraph
 - **Vector Search**: Databricks Vector Search with Delta Sync
 - **Observability**: MLflow auto-logging

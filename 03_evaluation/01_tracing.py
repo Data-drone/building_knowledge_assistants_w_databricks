@@ -41,6 +41,7 @@ dbutils.library.restartPython()
 # COMMAND ----------
 
 import mlflow
+import uuid
 from databricks_langchain import ChatDatabricks, CheckpointSaver
 from databricks.vector_search.client import VectorSearchClient
 from langchain_core.tools import tool
@@ -53,13 +54,24 @@ from langgraph.prebuilt import ToolNode
 # Configuration
 CATALOG = "agent_bootcamp"
 SCHEMA = "knowledge_assistant"
-LLM_ENDPOINT = "databricks-claude-sonnet-4-5"
-LAKEBASE_PROJECT = "knowledge-assistant-state"
+LLM_ENDPOINT = "databricks-claude-sonnet-4-6"
+LAKEBASE_INSTANCE_NAME = None
+LAKEBASE_AUTOSCALING_PROJECT = "knowledge-assistant-state"
+LAKEBASE_AUTOSCALING_BRANCH = "production"
 
 VECTOR_INDEX = f"{CATALOG}.{SCHEMA}.policy_index"
-ENDPOINT_NAME = "agent_bootcamp_endpoint"
+ENDPOINT_NAME = "one-env-shared-endpoint-15"
 
 print(f"✓ Configuration loaded")
+
+
+def lakebase_target() -> str:
+    if LAKEBASE_INSTANCE_NAME:
+        return LAKEBASE_INSTANCE_NAME
+    return f"{LAKEBASE_AUTOSCALING_PROJECT}/{LAKEBASE_AUTOSCALING_BRANCH}"
+
+
+TRACING_RUN_ID = uuid.uuid4().hex[:8]
 
 # COMMAND ----------
 
@@ -112,19 +124,19 @@ workflow.add_conditional_edges("agent", should_continue, {"tools": "tools", END:
 workflow.add_edge("tools", "agent")
 
 # Add CheckpointSaver
-from databricks.sdk import WorkspaceClient
-w = WorkspaceClient()
-instances = list(w.database.list_database_instances())
-target_instance = next((inst for inst in instances if inst.name == LAKEBASE_PROJECT), None)
-if not target_instance:
-    raise Exception(f"Lakebase instance '{LAKEBASE_PROJECT}' not found.")
-
-checkpointer = CheckpointSaver(instance_name=LAKEBASE_PROJECT)
+checkpointer = CheckpointSaver(
+    instance_name=LAKEBASE_INSTANCE_NAME,
+    project=LAKEBASE_AUTOSCALING_PROJECT,
+    branch=LAKEBASE_AUTOSCALING_BRANCH,
+)
 try:
     checkpointer.setup()
 except Exception as e:
     if "already exists" not in str(e).lower():
-        raise
+        raise Exception(
+            f"CheckpointSaver setup failed for {lakebase_target()}. "
+            "Verify the Lakebase target exists and your role has CREATE access on schema public."
+        ) from e
 
 agent = workflow.compile(checkpointer=checkpointer)
 
@@ -154,7 +166,7 @@ print(f"  All LangGraph calls will be automatically traced")
 # COMMAND ----------
 
 # Test agent with auto-tracing
-thread_id = "eval-test-001"
+thread_id = f"trace-demo-{TRACING_RUN_ID}"
 config = {"configurable": {"thread_id": thread_id}}
 
 result = agent.invoke(
@@ -163,6 +175,7 @@ result = agent.invoke(
 )
 
 print("✓ Agent executed with tracing")
+print(f"  Thread ID: {thread_id}")
 print(f"  Response: {result['messages'][-1].content[:150]}...")
 print(f"\n→ Check MLflow UI to see the trace with spans, latency, and tool calls")
 
