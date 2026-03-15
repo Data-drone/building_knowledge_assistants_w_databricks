@@ -3,7 +3,7 @@
 # MAGIC # Apps Dev Loop: Local Changes to Live Agent
 # MAGIC
 # MAGIC ## What You'll Do
-# MAGIC Learn the day-to-day development loop for an agent deployed with Databricks Apps.
+# MAGIC Learn the day-to-day development loop for a stateful agent deployed with Databricks Apps.
 # MAGIC
 # MAGIC **Estimated time:** 10-15 minutes
 # MAGIC
@@ -18,6 +18,7 @@
 # MAGIC - Understand where app runtime code lives in this repo
 # MAGIC - Sync local changes to workspace files
 # MAGIC - Redeploy quickly and verify `/invocations`
+# MAGIC - Pass `thread_id` and `user_id` so short-term and long-term memory work as intended
 # MAGIC - Configure OAuth token usage for notebook testing
 
 # COMMAND ----------
@@ -27,15 +28,22 @@
 # MAGIC
 # MAGIC We deploy the app from:
 # MAGIC
-# MAGIC - `apps/knowledge_assistant_agent/app.yaml` (runtime command + env)
+# MAGIC - `apps/knowledge_assistant_agent/app.yaml` (runtime command + env vars)
 # MAGIC - `apps/knowledge_assistant_agent/requirements.txt`
 # MAGIC - `apps/knowledge_assistant_agent/agent_server/start_server.py`
 # MAGIC - `apps/knowledge_assistant_agent/agent_server/agent.py`
 # MAGIC - `apps/knowledge_assistant_agent/agent_server/langgraph_agent.py`
+# MAGIC - `apps/knowledge_assistant_agent/agent_server/utils_memory.py` (long-term memory tools)
+# MAGIC - `apps/knowledge_assistant_agent/static/index.html` (chat UI)
 # MAGIC
-# MAGIC This app exposes a Responses API-compatible endpoint:
+# MAGIC The app exposes:
 # MAGIC
-# MAGIC `POST {APP_URL}/invocations`
+# MAGIC - `POST {APP_URL}/invocations` — Responses API-compatible endpoint
+# MAGIC - `GET {APP_URL}/` — Interactive chat UI (open in browser)
+# MAGIC
+# MAGIC **Memory** is controlled by `ENABLE_MEMORY` in `app.yaml` (currently `true`):
+# MAGIC - **Short-term** — pass `custom_inputs.thread_id` per request. Same `thread_id` -> same conversation. New `thread_id` -> fresh conversation.
+# MAGIC - **Long-term** — pass `custom_inputs.user_id` to persist facts across sessions. The agent has `get_user_memory`, `save_user_memory`, and `delete_user_memory` tools backed by Lakebase.
 
 # COMMAND ----------
 
@@ -101,35 +109,63 @@
 
 # MAGIC %md
 # MAGIC ## Step 5: Notebook Smoke Test Against the App
+# MAGIC
+# MAGIC This test exercises both memory layers:
+# MAGIC - **Short-term**: reuse the same `thread_id` across two turns, then use a fresh
+# MAGIC   thread to confirm isolation.
+# MAGIC - **Long-term**: pass `user_id` so the agent's memory tools can read/write
+# MAGIC   user-scoped facts in Lakebase.
 
 # COMMAND ----------
 
 import requests
+import uuid
 
 APP_URL = "https://knowledge-assistant-agent-app-984752964297111.11.azure.databricksapps.com"
 OAUTH_TOKEN = dbutils.secrets.get("my-secrets", "apps_oauth_token")
+THREAD_ID = f"apps-dev-loop-{uuid.uuid4()}"
+FRESH_THREAD_ID = f"apps-dev-loop-{uuid.uuid4()}"
+USER_ID = "bootcamp-tester"
 
-payload = {
+turn_1 = {
     "input": [
-        {"role": "user", "content": "Reply with: apps dev loop smoke test passed."}
-    ]
+        {"role": "user", "content": "How much vacation time do employees get?"}
+    ],
+    "custom_inputs": {"thread_id": THREAD_ID, "user_id": USER_ID},
 }
 
-resp = requests.post(
-    f"{APP_URL}/invocations",
-    headers={
-        "Authorization": f"Bearer {OAUTH_TOKEN}",
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    },
-    json=payload,
-    timeout=60,
-    allow_redirects=False,
-)
+turn_2 = {
+    "input": [{"role": "user", "content": "What about sick leave?"}],
+    "custom_inputs": {"thread_id": THREAD_ID, "user_id": USER_ID},
+}
 
-print("Status:", resp.status_code)
-print("Content-Type:", resp.headers.get("content-type"))
-print(resp.text[:500])
+fresh_thread = {
+    "input": [{"role": "user", "content": "What about sick leave?"}],
+    "custom_inputs": {"thread_id": FRESH_THREAD_ID, "user_id": USER_ID},
+}
+
+for label, payload in [
+    ("Turn 1", turn_1),
+    ("Turn 2 (same thread)", turn_2),
+    ("Fresh thread", fresh_thread),
+]:
+    resp = requests.post(
+        f"{APP_URL}/invocations",
+        headers={
+            "Authorization": f"Bearer {OAUTH_TOKEN}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+        json=payload,
+        timeout=60,
+        allow_redirects=False,
+    )
+    print(f"\n{label}")
+    print("thread_id:", payload["custom_inputs"]["thread_id"])
+    print("user_id:", payload["custom_inputs"].get("user_id", ""))
+    print("Status:", resp.status_code)
+    print("Content-Type:", resp.headers.get("content-type"))
+    print(resp.text[:700])
 
 # COMMAND ----------
 

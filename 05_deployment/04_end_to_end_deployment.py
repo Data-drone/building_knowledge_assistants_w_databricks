@@ -28,6 +28,7 @@
 
 import requests
 import mlflow
+import uuid
 
 APP_NAME = "knowledge-assistant-agent-app"
 APP_URL = "https://knowledge-assistant-agent-app-984752964297111.11.azure.databricksapps.com"
@@ -65,17 +66,43 @@ print("Experiment:", EXPERIMENT_NAME)
 
 # MAGIC %md
 # MAGIC ## Step 3: Post-Deploy Validation Tests
+# MAGIC
+# MAGIC These checks validate memory behavior:
+# MAGIC - **Short-term**: same `thread_id` preserves context; different `thread_id` isolates it
+# MAGIC - **Long-term**: `user_id` is passed so the agent's memory tools can read/write user-scoped facts
 
 # COMMAND ----------
 
-test_queries = [
-    "Reply with exactly: e2e test one passed.",
-    "In one sentence, explain why MCP helps governance.",
-    "Give two bullets on why evaluating agents matters.",
+shared_thread_id = f"e2e-{uuid.uuid4()}"
+isolated_thread_id = f"e2e-{uuid.uuid4()}"
+user_id = "bootcamp-e2e"
+
+test_cases = [
+    (
+        "Turn 1",
+        {
+            "input": [{"role": "user", "content": "How much vacation time do employees get?"}],
+            "custom_inputs": {"thread_id": shared_thread_id, "user_id": user_id},
+        },
+    ),
+    (
+        "Turn 2 (same thread)",
+        {
+            "input": [{"role": "user", "content": "What about sick leave?"}],
+            "custom_inputs": {"thread_id": shared_thread_id, "user_id": user_id},
+        },
+    ),
+    (
+        "Fresh thread",
+        {
+            "input": [{"role": "user", "content": "What about sick leave?"}],
+            "custom_inputs": {"thread_id": isolated_thread_id, "user_id": user_id},
+        },
+    ),
 ]
 
 responses = []
-for q in test_queries:
+for label, payload in test_cases:
     resp = requests.post(
         f"{APP_URL}/invocations",
         headers={
@@ -83,12 +110,12 @@ for q in test_queries:
             "Content-Type": "application/json",
             "Accept": "application/json",
         },
-        json={"input": [{"role": "user", "content": q}]},
+        json=payload,
         timeout=60,
         allow_redirects=False,
     )
-    responses.append(resp)
-    print(f"{resp.status_code} | {q}")
+    responses.append((label, payload, resp))
+    print(f"{resp.status_code} | {label} | thread_id={payload['custom_inputs']['thread_id']}")
 
 # COMMAND ----------
 
@@ -98,7 +125,7 @@ for q in test_queries:
 # COMMAND ----------
 
 ok = 0
-for resp in responses:
+for label, payload, resp in responses:
     ct = resp.headers.get("content-type", "")
     is_jsonish = "text/html" not in ct
     if resp.status_code == 200 and is_jsonish:
@@ -133,6 +160,7 @@ if len(traces) > 0:
 # MAGIC ## Summary
 # MAGIC
 # MAGIC - Deployment path is Databricks Apps (`sync` + `apps deploy`)
-# MAGIC - API validation uses OAuth + `/invocations`
-# MAGIC - Quality gate uses response correctness/health checks
+# MAGIC - API validation uses OAuth + `/invocations` with `thread_id` and `user_id`
+# MAGIC - Quality gate checks endpoint health, short-term memory continuity, and long-term memory availability
 # MAGIC - Monitoring uses MLflow traces in app experiment
+# MAGIC - The app also serves an interactive chat UI at `GET /` (open the App URL in a browser)
