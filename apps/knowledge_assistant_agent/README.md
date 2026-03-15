@@ -80,7 +80,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
   GRANT USAGE, SELECT ON SEQUENCES TO "<app-service-principal-client-id>";
 ```
 
-## Query
+## Query (CLI)
 
 ```bash
 APP_URL=$(databricks apps get knowledge-assistant-agent-app -o json | jq -r '.url')
@@ -106,3 +106,45 @@ curl -sS -X POST "$APP_URL/invocations" \
     \"custom_inputs\": {\"thread_id\": \"$THREAD_ID\", \"user_id\": \"$USER_ID\"}
   }" | jq .
 ```
+
+## Query (Notebook)
+
+If you want to call the deployed app from a Databricks notebook, use OAuth auth
+(not `dbutils.notebook...apiToken()`).
+
+### 1) Store an OAuth token in Databricks Secrets (run in terminal or `%sh`)
+
+```bash
+TOKEN=$(databricks auth token -o json | jq -r '.access_token // .token_value // .token')
+databricks secrets create-scope my-secrets || true
+databricks secrets put-secret my-secrets apps_oauth_token \
+  --string-value "$TOKEN"
+```
+
+### 2) Invoke `/invocations` from a notebook cell
+
+```python
+import requests
+
+APP_URL = "<your-app-url>"  # e.g. from `databricks apps get <app-name> -o json | jq -r '.url'`
+OAUTH_TOKEN = dbutils.secrets.get("my-secrets", "apps_oauth_token")
+
+resp = requests.post(
+    f"{APP_URL}/invocations",
+    headers={
+        "Authorization": f"Bearer {OAUTH_TOKEN}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    },
+    json={"input": [{"role": "user", "content": "What is Databricks MCP in one sentence?"}]},
+    timeout=60,
+    allow_redirects=False,
+)
+
+print("Status:", resp.status_code)
+print("Content-Type:", resp.headers.get("content-type"))
+print(resp.text)
+```
+
+If you get HTML with a sign-in page, your token is not a valid OAuth token for
+Databricks Apps.

@@ -30,7 +30,7 @@
 
 # COMMAND ----------
 
-%pip install -q --upgrade mlflow[databricks]>=3.1.0 databricks-sdk databricks-langchain[memory]>=0.8.0 databricks-vectorsearch>=0.30 langgraph>=0.2.50 langchain-core>=0.3.0
+%pip install -q --upgrade mlflow[databricks]>=3.1.0 databricks-sdk databricks-langchain[memory]>=0.8.0 databricks-vectorsearch>=0.30 langgraph>=0.2.50 langchain-core>=0.3.0 mcp databricks-mcp nest_asyncio
 
 # COMMAND ----------
 
@@ -835,31 +835,30 @@ else:
 # MAGIC    - **Client ID** (UUID format, e.g., `a1b2c3d4-...`)
 # MAGIC    - **Client Secret** (long string)
 # MAGIC
-# MAGIC **Step C — Grant Permission on the App:**
-# MAGIC 1. Go to **Compute → Apps** in the left sidebar
-# MAGIC 2. Click on your app (`my-weather-mcp-server`)
-# MAGIC 3. Go to the **Permissions** tab
-# MAGIC 4. Add the service principal with **Can Manage** or **Can Use** permission
+# MAGIC **Step C — Grant Entitlements & App Permission:**
+# MAGIC 1. On the service principal page, go to the **Entitlements** tab
+# MAGIC 2. Enable **Workspace access** (required for OAuth to Databricks Apps)
+# MAGIC 3. Go to **Compute → Apps** in the left sidebar
+# MAGIC 4. Click on your app (`my-weather-mcp-server`)
+# MAGIC 5. Go to the **Permissions** tab
+# MAGIC 6. Add the service principal with **Can Manage** or **Can Use** permission
 # MAGIC
 # MAGIC ---
 # MAGIC
 # MAGIC #### 💻 How the Code Below Works
 # MAGIC
-# MAGIC We use **two** `WorkspaceClient` instances:
-# MAGIC 1. **Default client** (`WorkspaceClient()`) — uses the notebook token to look up the app URL via the SDK
+# MAGIC We use **two** `WorkspaceClient` instances and the low-level MCP protocol:
+# MAGIC 1. **Default client** (`WorkspaceClient()`) — uses the notebook token to look up the app URL
 # MAGIC 2. **OAuth client** (`WorkspaceClient(host=..., client_id=..., client_secret=...)`) — authenticates
-# MAGIC    as the service principal and is passed to `DatabricksMCPClient`
+# MAGIC    as the service principal via `DatabricksOAuthClientProvider`
+# MAGIC 3. **Streamable HTTP transport** (`mcp.client.streamable_http`) — connects to the MCP endpoint
+# MAGIC
+# MAGIC **Note:** We use the low-level `streamablehttp_client` + `DatabricksOAuthClientProvider` instead of
+# MAGIC `DatabricksMCPClient` because the higher-level client has a known `httpx.UnsupportedProtocol` issue
+# MAGIC in notebook environments. The low-level approach gives us direct control over the async transport.
 # MAGIC
 # MAGIC The widgets below will prompt you for the service principal credentials.
 # MAGIC For production, store these in **Databricks Secrets** (`dbutils.secrets.get(scope, key)`).
-
-# COMMAND ----------
-
-# MAGIC %pip install -q databricks-mcp
-
-# COMMAND ----------
-
-dbutils.library.restartPython()
 
 # COMMAND ----------
 
@@ -869,19 +868,23 @@ dbutils.library.restartPython()
 
 # COMMAND ----------
 
+import nest_asyncio
+nest_asyncio.apply()
+
 dbutils.widgets.text("sp_client_id", "", "Service Principal Client ID")
 dbutils.widgets.text("sp_client_secret", "", "Service Principal Client Secret")
 print("⬆️  Fill in the widgets at the top of this notebook, then run the next cell.")
 
 # COMMAND ----------
 
-from databricks_mcp import DatabricksMCPClient
 from databricks.sdk import WorkspaceClient
+from databricks_mcp import DatabricksOAuthClientProvider
+from mcp.client.streamable_http import streamablehttp_client as connect
+from mcp import ClientSession
 
 PROJECT_NAME = "my-weather-mcp-server"  # Must match the app name from Step 5.5
 
 # ── Step 1: Look up the app URL using the notebook's default auth ──
-# This uses the notebook session token, which is fine for SDK admin calls.
 w = WorkspaceClient()
 app_info = w.apps.get(name=PROJECT_NAME)
 mcp_server_url = f"{app_info.url}/mcp"
@@ -899,30 +902,36 @@ if not sp_client_id or not sp_client_secret:
     )
 
 # ── Step 3: Create an OAuth M2M WorkspaceClient ──
-# This client authenticates as the service principal (not the notebook user).
-# The Databricks SDK automatically handles the OAuth token exchange:
-#   client_id + client_secret → OAuth access token → Bearer header
+# NOTE: w.config.host inside a notebook returns the regional URL (e.g. eastus2.azuredatabricks.net)
+# which doesn't support SP OAuth. Use the canonical workspace URL instead.
+workspace_url = f"https://{spark.conf.get('spark.databricks.workspaceUrl')}"
 oauth_client = WorkspaceClient(
-    host=w.config.host,
+    host=workspace_url,
     client_id=sp_client_id,
     client_secret=sp_client_secret,
 )
-print("✅ OAuth M2M WorkspaceClient created (service principal authenticated)")
+print("✅ OAuth M2M WorkspaceClient created")
 
 # ── Step 4: Connect to the MCP server ──
-# DatabricksMCPClient uses the OAuth client to authenticate through the app proxy.
-mcp_client = DatabricksMCPClient(
-    server_url=mcp_server_url,
-    workspace_client=oauth_client,
-)
+# Use the low-level streamable HTTP client with DatabricksOAuthClientProvider.
+# DatabricksMCPClient.list_tools() has a known issue with httpx in notebooks,
+# so we use the underlying MCP protocol directly.
+async def test_mcp_connection():
+    auth = DatabricksOAuthClientProvider(oauth_client)
+    async with connect(mcp_server_url, auth=auth) as (read_stream, write_stream, _):
+        async with ClientSession(read_stream, write_stream) as session:
+            await session.initialize()
 
-# List available tools
-tools = mcp_client.list_tools()
-print(f"\n✅ Available tools: {[t.name for t in tools]}")
+            tools_result = await session.list_tools()
+            tools = tools_result.tools
+            print(f"\n✅ Available tools: {[t.name for t in tools]}")
 
-# Call a tool to verify it works end-to-end
-result = mcp_client.call_tool("get_weather", {"city": "Tokyo"})
-print(f"\n🌤️ Test Result:\n{result}")
+            result = await session.call_tool("get_weather", {"city": "Tokyo"})
+            print(f"\n🌤️ Test Result:\n{result.content[0].text}")
+            return tools
+
+import asyncio
+mcp_tools = asyncio.run(test_mcp_connection())
 
 # COMMAND ----------
 
@@ -934,16 +943,32 @@ print(f"\n🌤️ Test Result:\n{result}")
 # COMMAND ----------
 
 from databricks_langchain import ChatDatabricks
+from langchain_core.tools import tool as langchain_tool
 from langchain_core.messages import HumanMessage
 
-# Convert MCP tools to LangChain
-langchain_tools = mcp_client.to_langchain_tools()
+# Wrap each MCP tool as a LangChain tool.
+# We call the MCP server over the streamable HTTP transport inside each tool.
+async def call_mcp_tool(tool_name: str, args: dict) -> str:
+    auth = DatabricksOAuthClientProvider(oauth_client)
+    async with connect(mcp_server_url, auth=auth) as (r, w, _):
+        async with ClientSession(r, w) as session:
+            await session.initialize()
+            result = await session.call_tool(tool_name, args)
+            return result.content[0].text
 
-# Create agent (simplified example)
+@langchain_tool
+def get_weather(city: str) -> str:
+    """Get current weather conditions for a city."""
+    import asyncio
+    return asyncio.get_event_loop().run_until_complete(
+        call_mcp_tool("get_weather", {"city": city})
+    )
+
+langchain_tools = [get_weather]
+
 llm = ChatDatabricks(endpoint="databricks-claude-sonnet-4-6")
 llm_with_tools = llm.bind_tools(langchain_tools)
 
-# Test
 response = llm_with_tools.invoke([
     HumanMessage(content="What's the weather in Paris?")
 ])
@@ -951,10 +976,9 @@ response = llm_with_tools.invoke([
 print("Question: What's the weather in Paris?")
 print(f"Answer: {response.content}")
 
-# If the response includes tool calls, execute them
 if hasattr(response, 'tool_calls') and response.tool_calls:
     for tool_call in response.tool_calls:
-        result = mcp_client.call_tool(tool_call['name'], tool_call['args'])
+        result = get_weather.invoke(tool_call['args'])
         print(f"\nTool Result: {result}")
 
 # COMMAND ----------

@@ -18,7 +18,7 @@ graph TB
 
     subgraph "Agent Layer"
         Agent[ResponsesAgent<br/>LangGraph]
-        LLM[Mosaic AI Gateway<br/>Claude Sonnet 4.5]
+        LLM[Mosaic AI Gateway<br/>Claude Sonnet 4.6]
         Tools[MCP Tools]
         Memory[Lakebase<br/>Checkpointer + Store]
     end
@@ -104,7 +104,8 @@ Learn how to add data query capabilities and custom tools to your agents.
 
 | Notebook | Topics | Duration |
 |----------|--------|----------|
-| [01_genie_integration.py](04_mcp_tool_integration/01_genie_integration.py) | Genie spaces, natural language SQL, multi-tool agents | 45 min |
+| [00_setup.py](04_mcp_tool_integration/00_setup.py) | Genie space creation, sample data for structured queries | 10 min |
+| [01_genie_integration.py](04_mcp_tool_integration/01_genie_integration.py) | Genie spaces, natural language SQL, multi-tool agents | 35 min |
 | [02_custom_tools.py](04_mcp_tool_integration/02_custom_tools.py) | Custom tools, MCP servers, advanced patterns | 30 min |
 
 **You'll build:** Agent with multiple tools (Vector Search + Genie + custom tools) that intelligently routes between documentation, data queries, and external APIs
@@ -182,7 +183,7 @@ Deploy your agent to production on Databricks Apps.
 | Component | Technology | Purpose |
 |-----------|-----------|---------|
 | **Agent Framework** | MLflow ResponsesAgent + LangGraph | Agent orchestration and execution |
-| **LLM** | Mosaic AI Gateway (Claude Sonnet 4.5) | Reasoning and generation |
+| **LLM** | Mosaic AI Gateway (Claude Sonnet 4.6) | Reasoning and generation |
 | **Vector Search** | Databricks Vector Search (Delta Sync) | Document similarity search |
 | **Structured Data** | Genie | Natural language to SQL |
 | **Memory** | Lakebase (PostgreSQL) | Conversation state (checkpointer + store) |
@@ -249,7 +250,8 @@ By the end of this bootcamp, you'll have built a production-ready **Internal Kno
 ```
 databricks_agent_bootcamp/
 ├── config.py                       # Shared configuration
-├── 00_foundations/                 # Platform basics
+├── databricks.yml                  # Databricks asset bundle definition
+├── 00_foundations/                  # Platform basics
 ├── 01_rag_pipeline/                # Vector Search + documents
 ├── 02_memory/                      # Lakebase checkpointing
 ├── 03_evaluation/                  # MLflow judges + scorers

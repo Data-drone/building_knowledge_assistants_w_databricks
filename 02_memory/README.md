@@ -6,7 +6,7 @@ Give your RAG agents memory in under 45 minutes!
 
 This module teaches you to add memory to AI agents using Databricks primitives:
 1. **Notebook 01** (20 min): Short-term memory with CheckpointSaver - Multi-turn conversations
-2. **Notebook 02** (25 min): Long-term memory with DatabricksStore - Cross-session personalization
+2. **Notebook 02** (30 min): Long-term memory with DatabricksStore - Cross-session personalization
 
 ## Prerequisites
 
@@ -94,7 +94,7 @@ After completing these notebooks, you'll understand:
 
 ## Technical Stack
 
-- **LLM**: Databricks LLM endpoints (Claude Sonnet 4.5)
+- **LLM**: Databricks LLM endpoints (Claude Sonnet 4.6)
 - **Orchestration**: LangGraph
 - **Vector Search**: Databricks Vector Search (for RAG)
 - **Short-term memory**: CheckpointSaver (Lakebase PostgreSQL)
@@ -128,4 +128,4 @@ After completing these notebooks, you'll understand:
 
 ---
 
-**Total Time**: 45 minutes from RAG agent to fully memory-enabled agent 🚀
+**Total Time**: 50 minutes from RAG agent to fully memory-enabled agent 🚀

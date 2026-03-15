@@ -5,7 +5,7 @@ Build production-ready evaluation and observability for your AI agents in under 
 ## What You'll Learn
 
 This module teaches you to add systematic evaluation and observability to AI agents:
-1. **Notebook 01** (20 min): MLflow Tracing - Add comprehensive observability to your agent
+1. **Notebook 01** (15 min): MLflow Tracing - Add comprehensive observability to your agent
 2. **Notebook 02** (30 min): Agent Evaluation - Build custom judges and production quality gates
 
 ## Prerequisites
@@ -36,7 +36,7 @@ This module teaches you to add systematic evaluation and observability to AI age
 - Use traces to identify performance bottlenecks
 - Apply production tracing features (async logging, sampling)
 
-**Time**: 20 minutes
+**Time**: 15 minutes
 
 ---
 
@@ -212,4 +212,4 @@ Deploy → Trace → Evaluate → Human Feedback → Refine Judges → Repeat
 
 ---
 
-**Total Time**: 50 minutes from basic agent to production-ready evaluation 🚀
+**Total Time**: 45 minutes from basic agent to production-ready evaluation 🚀
