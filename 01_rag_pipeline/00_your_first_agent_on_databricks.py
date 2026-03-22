@@ -23,7 +23,8 @@ dbutils.library.restartPython()
 
 import mlflow
 from databricks_langchain import ChatDatabricks
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage
+from langchain_core.prompts import ChatPromptTemplate
 from langgraph.graph import StateGraph, MessagesState, END
 
 # Configuration
@@ -95,12 +96,77 @@ print(f"Agent: {result['messages'][-1].content}")
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ## Step 6: Add a Prompt Template
+
+# COMMAND ----------
+
+basic_bot_prompt = ChatPromptTemplate.from_messages([
+    (
+        "system",
+        "You are a beginner-friendly Databricks coach with a playful, Yoda-inspired voice. "
+        "Use simple words, slightly inverted sentence structure, and a wise, encouraging tone. "
+        "Answer in 2 short bullet points and end with one practical next step."
+    ),
+    ("human", "{user_input}"),
+])
+
+
+def call_prompted_llm(state: MessagesState):
+    latest_user_message = next(
+        message.content
+        for message in reversed(state["messages"])
+        if isinstance(message, HumanMessage)
+    )
+    prompt_messages = basic_bot_prompt.invoke({"user_input": latest_user_message}).messages
+    response = llm.invoke(prompt_messages)
+    return {"messages": [response]}
+
+
+prompted_workflow = StateGraph(MessagesState)
+prompted_workflow.add_node("prompted_agent", call_prompted_llm)
+prompted_workflow.set_entry_point("prompted_agent")
+prompted_workflow.add_edge("prompted_agent", END)
+prompted_agent = prompted_workflow.compile()
+
+print("✓ Prompt-templated agent built successfully")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Step 7: Compare Both Bots
+# MAGIC
+# MAGIC Ask both bots the same question so you can see how the prompt changes the response style.
+
+# COMMAND ----------
+
+comparison_question = "How do I start building an AI agent on Databricks?"
+
+basic_result = agent.invoke({
+    "messages": [HumanMessage(content=comparison_question)]
+})
+prompted_result = prompted_agent.invoke({
+    "messages": [HumanMessage(content=comparison_question)]
+})
+
+print(f"User: {comparison_question}")
+print()
+print("Minimal Bot:")
+print(basic_result["messages"][-1].content)
+print()
+print("Prompt-Templated Bot:")
+print(f"Prompted Agent: {prompted_result['messages'][-1].content}")
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ## Summary
 # MAGIC
-# MAGIC You've built your first agent! Key concepts:
+# MAGIC You've built two versions of your first agent! Key concepts:
 # MAGIC - **LLM**: ChatDatabricks wraps the endpoint
 # MAGIC - **State**: MessagesState tracks conversation
 # MAGIC - **Graph**: LangGraph creates the agent loop
+# MAGIC - **Minimal bot**: Sends the user's message directly to the model
+# MAGIC - **Prompted bot**: Uses a prompt template to shape tone, structure, and personality
 # MAGIC - **MLflow**: Auto-logging captures traces
 # MAGIC
 # MAGIC Next: **Notebook 01** - Add Vector Search for RAG!
