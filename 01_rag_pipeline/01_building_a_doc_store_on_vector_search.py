@@ -49,10 +49,10 @@
 # COMMAND ----------
 
 import mlflow
-from databricks_langchain import ChatDatabricks
+from databricks_langchain import ChatDatabricks, VectorSearchRetrieverTool
 from databricks.vector_search.client import VectorSearchClient
-from langchain_core.tools import tool
 from langchain_core.messages import HumanMessage
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langgraph.graph import StateGraph, MessagesState, END
 from langgraph.prebuilt import ToolNode
 
@@ -325,62 +325,52 @@ print("✓ Vector Search is working!")
 # MAGIC %md
 # MAGIC ## Step 3: Wrap Vector Search as a Tool
 # MAGIC
-# MAGIC To give our agent access to Vector Search, we wrap it as a LangChain tool.
+# MAGIC To give our agent access to Vector Search, we use the built-in Databricks LangChain retriever tool instead of writing a custom `@tool` function.
+# MAGIC
+# MAGIC This keeps the notebook simpler while still showing the same RAG pattern you'll use in LangGraph.
 
 # COMMAND ----------
 
-@tool
-def search_policy_documents(query: str) -> str:
-    """
-    Search company policy documents.
-
-    Use this to find information about:
-    - Vacation and leave policies
-    - Remote work policies
-    - Professional development
-    - Benefits and equipment
-
-    Args:
-        query: Natural language search query
-
-    Returns:
-        Relevant document excerpts
-    """
-    vsc = VectorSearchClient()
-    index = vsc.get_index(ENDPOINT_NAME, VECTOR_INDEX)
-
-    results = index.similarity_search(
-        query_text=query,
-        columns=["source_file", "chunk_text"],
-        num_results=3
-    )
-
-    # Format for LLM
-    formatted = []
-    for row in results.get("result", {}).get("data_array", []):
-        formatted.append(f"[Source: {row[0]}]\n{row[1]}\n")
-
-    if not formatted:
-        return "No relevant documents found."
-
-    return "\n".join(formatted)
+search_policy_documents = VectorSearchRetrieverTool(
+    index_name=VECTOR_INDEX,
+    tool_name="search_policy_documents",
+    tool_description=(
+        "Search company policy documents for information about vacation and leave "
+        "policies, remote work, professional development, benefits, and equipment."
+    ),
+    columns=["source_file", "chunk_text"],
+    text_column="chunk_text",
+    num_results=3,
+)
 
 # Test the tool
 print("Testing tool:")
-result = search_policy_documents.invoke({"query": "vacation"})
-print(result[:300] + "...")
+result = search_policy_documents.invoke("vacation")
+print(str(result)[:300] + "...")
 
 # COMMAND ----------
 
 # MAGIC %md
 # MAGIC ## Step 4: Build Agent with Tool
 # MAGIC
-# MAGIC Now we add the Vector Search tool to our agent from Notebook 00!
+# MAGIC Now we add the Vector Search tool to our agent from Notebook 00 and give it a prompt template so the bot responds consistently.
 
 # COMMAND ----------
 
 # Initialize LLM
 llm = ChatDatabricks(endpoint=LLM_ENDPOINT, temperature=0.1)
+
+rag_bot_prompt = ChatPromptTemplate.from_messages([
+    (
+        "system",
+        "You are a beginner-friendly Databricks coach helping users answer questions "
+        "about company policy documents. Use retrieved context when it is available, "
+        "cite source file names when the tool provides them, and do not make up policy "
+        "details that are not in the documents. Answer in 2 short bullet points and end "
+        "with one practical next step."
+    ),
+    MessagesPlaceholder("messages"),
+])
 
 # Bind tools
 tools = [search_policy_documents]
@@ -388,7 +378,8 @@ llm_with_tools = llm.bind_tools(tools)
 
 # Agent logic
 def call_agent(state: MessagesState):
-    response = llm_with_tools.invoke(state["messages"])
+    prompt_messages = rag_bot_prompt.invoke({"messages": state["messages"]}).messages
+    response = llm_with_tools.invoke(prompt_messages)
     return {"messages": [response]}
 
 # Routing logic
@@ -409,6 +400,7 @@ workflow.add_edge("tools", "agent")
 agent = workflow.compile()
 
 print("✓ RAG Agent built!")
+print("✓ Prompt template added")
 print("\nAgent flow:")
 print("  User → Agent (decides to search?) → Vector Search → Agent (generates answer) → User")
 
