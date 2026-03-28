@@ -31,7 +31,9 @@
 
 # COMMAND ----------
 
-%pip install -q --upgrade mlflow[databricks]>=3.1.0 requests
+%pip install -q --upgrade \
+  "mlflow[databricks]>=3.10,<3.11" \
+  requests
 
 # COMMAND ----------
 

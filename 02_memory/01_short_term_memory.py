@@ -5,6 +5,11 @@
 # MAGIC ## What You'll Build
 # MAGIC A RAG agent with conversation memory that maintains context across multiple turns.
 # MAGIC
+# MAGIC ## Why Lakebase Shows Up In This Module
+# MAGIC Databricks uses Lakebase as the managed state layer for these examples. Instead of wiring up
+# MAGIC your own PostgreSQL instance, you can use a managed target for checkpoint tables and keep
+# MAGIC memory infrastructure close to the rest of your agent stack.
+# MAGIC
 # MAGIC ## Learning Objectives
 # MAGIC - Build RAG agents with Vector Search tools
 # MAGIC - Compare agent behavior with and without memory
@@ -26,7 +31,13 @@
 
 # COMMAND ----------
 
-%pip install -q --upgrade mlflow[databricks]>=3.1.0 databricks-langchain[memory]>=0.8.0 databricks-vectorsearch>=0.30 langgraph>=0.2.50 langchain-core>=0.3.0
+%pip install -q --upgrade \
+  "databricks-sdk>=0.101,<0.103" \
+  "mlflow[databricks]>=3.10,<3.11" \
+  "databricks-langchain[memory]>=0.17,<0.18" \
+  "databricks-vectorsearch>=0.66,<0.67" \
+  "langgraph>=1.1,<1.2" \
+  "langchain-core>=1.2,<2"
 %restart_python
 # COMMAND ----------
 
@@ -36,10 +47,9 @@
 # COMMAND ----------
 
 import mlflow
-from databricks_langchain import ChatDatabricks, CheckpointSaver
-from databricks.vector_search.client import VectorSearchClient
-from langchain_core.tools import tool
+from databricks_langchain import ChatDatabricks, CheckpointSaver, VectorSearchRetrieverTool
 from langchain_core.messages import HumanMessage
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langgraph.graph import StateGraph, MessagesState, END
 from langgraph.prebuilt import ToolNode
 import uuid_utils
@@ -86,41 +96,38 @@ def resolve_thread_id(custom_thread_id: str | None = None, conversation_id: str 
 # COMMAND ----------
 
 # Create Vector Search tool
-@tool
-def search_policy_documents(query: str) -> str:
-    """
-    Search company policy documents for information about vacation, leave,
-    remote work, professional development, and benefits.
-
-    Args:
-        query: Natural language search query
-
-    Returns:
-        Relevant document excerpts
-    """
-    vsc = VectorSearchClient(disable_notice=True)
-    index = vsc.get_index(ENDPOINT_NAME, VECTOR_INDEX)
-
-    results = index.similarity_search(
-        query_text=query,
-        columns=["source_file", "chunk_text"],
-        num_results=3
-    )
-
-    formatted = []
-    for row in results.get("result", {}).get("data_array", []):
-        formatted.append(f"[Source: {row[0]}]\n{row[1]}\n")
-
-    return "\n".join(formatted) if formatted else "No relevant documents found."
+search_policy_documents = VectorSearchRetrieverTool(
+    index_name=VECTOR_INDEX,
+    tool_name="search_policy_documents",
+    tool_description=(
+        "Search company policy documents for information about vacation and leave "
+        "policies, remote work, professional development, benefits, and equipment."
+    ),
+    columns=["source_file", "chunk_text"],
+    num_results=3,
+)
 
 # Initialize LLM and tools
 llm = ChatDatabricks(endpoint=LLM_ENDPOINT, temperature=0.1)
+short_term_memory_prompt = ChatPromptTemplate.from_messages([
+    (
+        "system",
+        "You are a beginner-friendly Databricks coach helping users answer questions "
+        "about company policy documents. Use retrieved context when it is available, "
+        "use the conversation history to understand follow-up questions, cite source "
+        "file names when the tool provides them, and do not make up policy details "
+        "that are not in the documents. Answer in 2 short bullet points and end with "
+        "one practical next step."
+    ),
+    MessagesPlaceholder("messages"),
+])
 tools = [search_policy_documents]
 llm_with_tools = llm.bind_tools(tools)
 
 # Agent logic
 def call_agent(state: MessagesState):
-    response = llm_with_tools.invoke(state["messages"])
+    prompt_messages = short_term_memory_prompt.invoke({"messages": state["messages"]}).messages
+    response = llm_with_tools.invoke(prompt_messages)
     return {"messages": [response]}
 
 def should_continue(state: MessagesState):
@@ -136,6 +143,7 @@ workflow.add_conditional_edges("agent", should_continue, {"tools": "tools", END:
 workflow.add_edge("tools", "agent")
 
 print("✓ RAG agent built with Vector Search tool")
+print("✓ Prompt template added")
 
 # COMMAND ----------
 

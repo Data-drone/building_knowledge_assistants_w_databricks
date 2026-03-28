@@ -1,13 +1,11 @@
-# Foundations - Platform Setup & Orientation
+# Foundations - Workspace Setup
 
-Set up your Databricks workspace and understand the platform in under 45 minutes!
+Set up your Databricks workspace in under 15 minutes.
 
 ## What You'll Learn
 
-This module sets up the bootcamp infrastructure and introduces the Databricks platform:
-1. **Notebook 00** (15 min): Setup - Create Unity Catalog assets, sample data, and Lakebase project
-2. **Notebook 01** (10 min): Mosaic AI Gateway - LLM endpoints and pay-per-token vs provisioned
-3. **Notebook 02** (15 min): Platform Orientation - MCP, Unity Catalog, ResponsesAgent vs ChatAgent
+This module sets up the bootcamp infrastructure used by the rest of the repo:
+1. **Notebook 00** (15 min): Setup - Create Unity Catalog assets, sample data, governed UC function, and Lakebase project
 
 ## Prerequisites
 
@@ -27,35 +25,8 @@ This module sets up the bootcamp infrastructure and introduces the Databricks pl
 - Creating Unity Catalog catalog and schema
 - Uploading sample policy documents to a Volume
 - Creating employee and leave balance tables
+- Creating a governed UC function for later MCP demos
 - Creating a Lakebase project and branches
-
-**Time**: 15 minutes
-
----
-
-### Next: 01_mosaic_gateway.py
-
-**What you'll build**: Understanding of Databricks LLM endpoints
-
-**Key concepts**:
-- Mosaic AI Gateway architecture
-- Listing available Foundation Model endpoints
-- Testing chat completions with different models
-- Pay-per-token vs provisioned throughput
-
-**Time**: 10 minutes
-
----
-
-### Next: 02_platform_orientation.py
-
-**What you'll build**: Mental model for Databricks agent development
-
-**Key concepts**:
-- Comparing Databricks to AWS, Azure, Google Cloud
-- Unity Catalog governance model
-- Why MCP (Model Context Protocol) matters
-- ResponsesAgent vs ChatAgent
 
 **Time**: 15 minutes
 
@@ -63,11 +34,10 @@ This module sets up the bootcamp infrastructure and introduces the Databricks pl
 
 ## What's Next?
 
-After completing these notebooks, you'll understand:
+After completing this notebook, you'll have:
 - ✅ How the Databricks workspace is configured for agents
-- ✅ How to access LLMs through Mosaic AI Gateway
-- ✅ Platform concepts: Unity Catalog, MCP, governance
-- ✅ ResponsesAgent vs ChatAgent trade-offs
+- ✅ Core assets for the RAG, memory, and MCP modules
+- ✅ A governed UC function ready for later tool demos
 
 ### Continue Learning
 
@@ -85,7 +55,7 @@ After completing these notebooks, you'll understand:
 1. Open `00_setup.py`
 2. Run all cells — this creates catalog, schema, tables, documents, and Lakebase project
 3. Wait for setup to complete before continuing
-4. Continue to `01_mosaic_gateway.py` and `02_platform_orientation.py`
+4. Continue to `../01_rag_pipeline/00_your_first_agent_on_databricks.py`
 
 ---
 
@@ -106,4 +76,4 @@ After completing these notebooks, you'll understand:
 
 ---
 
-**Total Time**: 40 minutes from zero to platform-ready 🚀
+**Total Time**: 15 minutes from zero to platform-ready 🚀

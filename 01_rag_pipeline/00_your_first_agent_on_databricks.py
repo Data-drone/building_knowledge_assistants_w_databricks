@@ -7,11 +7,25 @@
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ## Where Databricks Fits Here
+# MAGIC
+# MAGIC This notebook is the practical introduction to Databricks-hosted LLMs.
+# MAGIC `ChatDatabricks` gives you a chat model interface backed by a Databricks serving endpoint,
+# MAGIC so you can focus on prompts, state, and agent logic instead of separate model hosting setup.
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ## Step 1: Install Dependencies
 
 # COMMAND ----------
 
-%pip install -q --upgrade mlflow[databricks]>=3.1.0 databricks-langchain>=0.8.0 langgraph>=0.2.50 langchain-core>=0.3.0
+%pip install -q --upgrade \
+  "databricks-sdk>=0.101,<0.103" \
+  "mlflow[databricks]>=3.10,<3.11" \
+  "databricks-langchain>=0.17,<0.18" \
+  "langgraph>=1.1,<1.2" \
+  "langchain-core>=1.2,<2"
 dbutils.library.restartPython()
 
 # COMMAND ----------

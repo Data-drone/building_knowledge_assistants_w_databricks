@@ -47,16 +47,14 @@ graph TB
 
 ## 📚 Learning Path
 
-### Module 0: Foundations (45 min)
-Build a solid understanding of the Databricks platform.
+### Module 0: Foundations (15 min)
+Create the shared assets used by the rest of the bootcamp.
 
 | Notebook | Topics | Duration |
 |----------|--------|----------|
-| [00_setup.py](00_foundations/00_setup.py) | Unity Catalog, Lakebase, Sample Data | 15 min |
-| [01_mosaic_gateway.py](00_foundations/01_mosaic_gateway.py) | LLM Endpoints, Pay-per-token vs Provisioned | 10 min |
-| [02_platform_orientation.py](00_foundations/02_platform_orientation.py) | MCP, Unity Catalog, ResponsesAgent | 15 min |
+| [00_setup.py](00_foundations/00_setup.py) | Unity Catalog, Lakebase, sample data, governed UC function | 15 min |
 
-**You'll learn:** Platform concepts, governance model, why MCP matters
+**You'll get:** Shared assets for RAG, memory, and MCP modules
 
 ---
 

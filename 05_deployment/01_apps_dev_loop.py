@@ -14,6 +14,11 @@
 # MAGIC - Databricks App created once as `knowledge-assistant-agent-app`
 # MAGIC - App source code present under `apps/knowledge_assistant_agent`
 # MAGIC
+# MAGIC **Why `ResponsesAgent` shows up here**
+# MAGIC - The early notebooks use plain LangGraph flows to teach core agent ideas quickly
+# MAGIC - The deployed app uses MLflow's `ResponsesAgent` interface because it provides the request,
+# MAGIC   streaming, and tool-event shape expected by the production serving layer
+# MAGIC
 # MAGIC ## Learning Objectives
 # MAGIC - Understand where app runtime code lives in this repo
 # MAGIC - Sync local changes to workspace files

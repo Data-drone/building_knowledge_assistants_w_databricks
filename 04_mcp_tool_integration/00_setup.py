@@ -17,6 +17,10 @@
 # MAGIC - Unity Catalog permissions flow through automatically
 # MAGIC - Governance and audit trails
 # MAGIC
+# MAGIC In this repo, MCP becomes important once the agent needs access to governed data tools.
+# MAGIC The setup notebook already created the employee tables and a `get_employee` UC function;
+# MAGIC this module shows how to expose those kinds of assets to the agent in a controlled way.
+# MAGIC
 # MAGIC ## Learning Objectives
 # MAGIC - ✅ Understand when to use Vector Search vs SQL vs Genie
 # MAGIC - ✅ Build multi-tool agents that route intelligently
@@ -35,7 +39,12 @@
 
 # COMMAND ----------
 
-%pip install -q --upgrade databricks-sdk mlflow[databricks]>=3.1.0 databricks-langchain[memory]>=0.8.0 databricks-vectorsearch>=0.30 langgraph>=0.2.50
+%pip install -q --upgrade \
+  "databricks-sdk>=0.101,<0.103" \
+  "mlflow[databricks]>=3.10,<3.11" \
+  "databricks-langchain[memory]>=0.17,<0.18" \
+  "databricks-vectorsearch>=0.66,<0.67" \
+  "langgraph>=1.1,<1.2"
 
 # COMMAND ----------
 
@@ -47,6 +56,8 @@ dbutils.library.restartPython()
 # MAGIC ## Step 2: Verify Core Setup
 # MAGIC
 # MAGIC Check that foundational assets from Module 00 exist.
+# MAGIC These assets replace the need for a separate platform-orientation notebook because the
+# MAGIC governance story is introduced here, where the tools are actually used.
 
 # COMMAND ----------
 

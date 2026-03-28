@@ -14,6 +14,7 @@
 # MAGIC **Sample Data Tables:**
 # MAGIC - ✅ `employee_data` - Sample employee records
 # MAGIC - ✅ `leave_balances` - Vacation and sick leave balances
+# MAGIC - ✅ `get_employee` UC function - Governed employee lookup tool
 # MAGIC
 # MAGIC **Source Documents:**
 # MAGIC - ✅ Policy markdown files (vacation, remote work, benefits, etc.)
@@ -21,6 +22,11 @@
 # MAGIC **Lakebase:**
 # MAGIC - ✅ Project: `knowledge-assistant-state`
 # MAGIC - ✅ Branch: `development`
+# MAGIC
+# MAGIC ## How These Assets Show Up Later
+# MAGIC - **Module 01 (RAG)** uses the seeded policy documents to build a Vector Search index
+# MAGIC - **Module 04 (MCP tools)** uses the employee tables and `get_employee` UC function as governed tools
+# MAGIC - **Module 02 (Memory)** uses the Lakebase project for short-term and long-term memory
 # MAGIC
 # MAGIC ## Prerequisites
 # MAGIC - Databricks Runtime MLR 17.3 LTS or higher
@@ -38,7 +44,10 @@
 
 # COMMAND ----------
 
-%pip install -q --upgrade databricks-sdk mlflow[databricks]>=3.1.0 databricks-langchain>=0.8.0
+%pip install -q --upgrade \
+  "databricks-sdk>=0.101,<0.103" \
+  "mlflow[databricks]>=3.10,<3.11" \
+  "databricks-langchain>=0.17,<0.18"
 
 # COMMAND ----------
 
@@ -203,7 +212,32 @@ display(leave_df.limit(5))
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Step 5: Seed Source Documents
+# MAGIC ## Step 5: Create Governed UC Function
+# MAGIC
+# MAGIC Create a Unity Catalog function that later modules can expose through MCP.
+
+# COMMAND ----------
+
+spark.sql(f"""
+CREATE OR REPLACE FUNCTION {CATALOG}.{SCHEMA}.get_employee(emp_id INT)
+RETURNS STRING
+LANGUAGE SQL
+COMMENT 'Get employee info by ID (governed)'
+RETURN (
+  SELECT CONCAT(name, ' - ', role, ' (', department, ')')
+  FROM {EMPLOYEE_TABLE}
+  WHERE employee_id = emp_id
+  LIMIT 1
+)
+""")
+
+print(f"✅ Created UC function: {UC_NAMESPACE}.get_employee")
+display(spark.sql(f"SELECT {UC_NAMESPACE}.get_employee(1) AS sample_employee"))
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Step 6: Seed Source Documents
 # MAGIC
 # MAGIC Create sample policy documents that will be used for Vector Search demonstrations.
 
@@ -417,7 +451,7 @@ for file in files:
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Step 6: Create Lakebase Project
+# MAGIC ## Step 7: Create Lakebase Project
 # MAGIC
 # MAGIC Create a Lakebase project for conversation memory (checkpointer) and long-term storage.
 
@@ -451,7 +485,7 @@ except Exception as e:
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Step 7: Verification
+# MAGIC ## Step 8: Verification
 # MAGIC
 # MAGIC Verify all setup steps completed successfully.
 
@@ -503,10 +537,21 @@ try:
 except Exception as e:
     print(f"⚠️  Lakebase project status unknown (this is OK for now)")
 
+# Check UC function
+try:
+    sample_employee = spark.sql(
+        f"SELECT {UC_NAMESPACE}.get_employee(1) AS employee_summary"
+    ).collect()[0]["employee_summary"]
+    print(f"✅ UC function '{UC_NAMESPACE}.get_employee' exists")
+    print(f"   Sample output: {sample_employee}")
+except Exception as e:
+    print(f"❌ UC function '{UC_NAMESPACE}.get_employee' NOT FOUND")
+
 print("=" * 80)
 print("\n🎉 SETUP COMPLETE!")
 print("\nNext Steps:")
-print("1. Continue to Module 00 > 01_mosaic_gateway.py")
-print("2. Or jump to Module 01 > 01_building_a_doc_store_on_vector_search.py")
+print("1. Continue to Module 01 > 00_your_first_agent_on_databricks.py")
+print("2. Then move to Module 01 > 01_building_a_doc_store_on_vector_search.py")
+print("3. Return to the memory and MCP modules after RAG is working")
 print("\nAll foundational assets are ready for the bootcamp! 🚀")
 print("=" * 80)

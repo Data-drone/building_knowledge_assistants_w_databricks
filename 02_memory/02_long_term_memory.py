@@ -28,7 +28,13 @@
 
 # COMMAND ----------
 
-%pip install -q --upgrade mlflow[databricks]>=3.1.0 databricks-langchain[memory]>=0.8.0 databricks-vectorsearch>=0.30 langgraph>=0.2.50 langchain-core>=0.3.0
+%pip install -q --upgrade \
+  "databricks-sdk>=0.101,<0.103" \
+  "mlflow[databricks]>=3.10,<3.11" \
+  "databricks-langchain[memory]>=0.17,<0.18" \
+  "databricks-vectorsearch>=0.66,<0.67" \
+  "langgraph>=1.1,<1.2" \
+  "langchain-core>=1.2,<2"
 %restart_python
 
 # COMMAND ----------
@@ -39,12 +45,11 @@
 # COMMAND ----------
 
 import json
-import mlflow
-from databricks_langchain import ChatDatabricks, CheckpointSaver, DatabricksStore
-from databricks.vector_search.client import VectorSearchClient
+from databricks_langchain import ChatDatabricks, CheckpointSaver, DatabricksStore, VectorSearchRetrieverTool
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage
 from langgraph.graph import StateGraph, MessagesState, END
 from langgraph.prebuilt import ToolNode
 from datetime import datetime
@@ -56,8 +61,6 @@ CATALOG = "agent_bootcamp"
 SCHEMA = "knowledge_assistant"
 LLM_ENDPOINT = "databricks-claude-sonnet-4-6"
 LAKEBASE_INSTANCE_NAME = "knowledge-assistant-state"
-EMBEDDING_ENDPOINT = "databricks-gte-large-en"
-EMBEDDING_DIMS = 1024
 
 # Derived values
 VECTOR_INDEX = f"{CATALOG}.{SCHEMA}.policy_index"
@@ -70,16 +73,6 @@ def sanitize_namespace_id(user_id: str) -> str:
     return user_id.replace(".", "_").replace("@", "_at_")
 
 print(f"✓ Configuration loaded")
-
-
-def get_session_id(custom_inputs: dict | None = None, conversation_id: str | None = None) -> str | None:
-    """Canonical session-id priority for tracing metadata in app/server runtimes."""
-    ci = custom_inputs or {}
-    if ci.get("session_id"):
-        return str(ci["session_id"])
-    if conversation_id:
-        return str(conversation_id)
-    return None
 
 # COMMAND ----------
 
@@ -105,35 +98,39 @@ def get_session_id(custom_inputs: dict | None = None, conversation_id: str | Non
 # COMMAND ----------
 
 # Create Vector Search tool
-@tool
-def search_policy_documents(query: str) -> str:
-    """
-    Search company policy documents for information about vacation, leave,
-    remote work, professional development, and benefits.
-    """
-    vsc = VectorSearchClient(disable_notice=True)
-    index = vsc.get_index(ENDPOINT_NAME, VECTOR_INDEX)
-
-    results = index.similarity_search(
-        query_text=query,
-        columns=["source_file", "chunk_text"],
-        num_results=3
-    )
-
-    formatted = []
-    for row in results.get("result", {}).get("data_array", []):
-        formatted.append(f"[Source: {row[0]}]\n{row[1]}\n")
-
-    return "\n".join(formatted) if formatted else "No relevant documents found."
+search_policy_documents = VectorSearchRetrieverTool(
+    index_name=VECTOR_INDEX,
+    tool_name="search_policy_documents",
+    tool_description=(
+        "Search company policy documents for information about vacation and leave "
+        "policies, remote work, professional development, benefits, and equipment."
+    ),
+    columns=["source_file", "chunk_text"],
+    text_column="chunk_text",
+    num_results=3,
+)
 
 # Initialize LLM and tools
 llm = ChatDatabricks(endpoint=LLM_ENDPOINT, temperature=0.1)
+checkpointed_rag_prompt = ChatPromptTemplate.from_messages([
+    (
+        "system",
+        "You are a beginner-friendly Databricks coach helping users answer questions "
+        "about company policy documents. Use retrieved context when it is available, "
+        "use the conversation history to understand follow-up questions, cite source "
+        "file names when the tool provides them, and do not make up policy details "
+        "that are not in the documents. Answer in 2 short bullet points and end with "
+        "one practical next step."
+    ),
+    MessagesPlaceholder("messages"),
+])
 tools = [search_policy_documents]
 llm_with_tools = llm.bind_tools(tools)
 
 # Agent logic
 def call_agent(state: MessagesState):
-    response = llm_with_tools.invoke(state["messages"])
+    prompt_messages = checkpointed_rag_prompt.invoke({"messages": state["messages"]}).messages
+    response = llm_with_tools.invoke(prompt_messages)
     return {"messages": [response]}
 
 def should_continue(state: MessagesState):
@@ -166,6 +163,7 @@ except Exception as e:
 agent_with_checkpointer = workflow.compile(checkpointer=checkpointer)
 
 print("✓ Checkpointed RAG agent built (short-term memory only)")
+print("✓ Prompt template added")
 
 # COMMAND ----------
 
@@ -205,7 +203,11 @@ print("\n→ Agent doesn't remember Engineering department (different thread)")
 # COMMAND ----------
 
 # Initialize DatabricksStore for long-term memory
-store = DatabricksStore(instance_name=LAKEBASE_INSTANCE_NAME)
+store = DatabricksStore(
+    instance_name=LAKEBASE_INSTANCE_NAME,
+    embedding_endpoint=MEMORY_EMBEDDING_ENDPOINT,
+    embedding_dims=MEMORY_EMBEDDING_DIMS,
+)
 try:
     store.setup()
     print("✓ DatabricksStore tables initialized")
@@ -216,7 +218,6 @@ except Exception as e:
         raise
 
 print("✓ DatabricksStore ready")
-print(f"  Embedding endpoint: {EMBEDDING_ENDPOINT} ({EMBEDDING_DIMS} dims)")
 print("\nMemory Architecture:")
 print("  CheckpointSaver → Short-term: conversation history (per thread)")
 print("  DatabricksStore → Long-term: user facts/preferences (across all threads)")
@@ -287,10 +288,22 @@ print(f"\nTest retrieval: department = {dept.value['value'] if dept else 'Not fo
 # COMMAND ----------
 
 # Create agent that reads from DatabricksStore
+store_backed_prompt = ChatPromptTemplate.from_messages([
+    (
+        "system",
+        "You are a beginner-friendly Databricks coach helping users answer questions "
+        "about company policy documents. Use retrieved context when it is available, "
+        "use the conversation history for follow-up questions, and incorporate user "
+        "context from long-term memory when it is provided. Cite source file names "
+        "when the tool provides them, do not make up policy details, and answer in 2 "
+        "short bullet points followed by one practical next step.\n\n"
+        "Known user context:\n{memory_context}"
+    ),
+    MessagesPlaceholder("messages"),
+])
+
 def call_agent_with_store(state: MessagesState):
     """Agent logic that reads from Store for personalization."""
-    messages = state["messages"]
-
     # Extract user_id (in production, from authentication)
     user_id = "alice@company.com"  # Hardcoded for demo
     sanitized_user_id = sanitize_namespace_id(user_id)
@@ -312,14 +325,12 @@ def call_agent_with_store(state: MessagesState):
     if meeting_pref:
         context_parts.append(f"User prefers {meeting_pref.value['value']} meetings")
 
-    # Inject context as system message
-    if context_parts:
-        context_message = SystemMessage(
-            content=f"User context: {'; '.join(context_parts)}"
-        )
-        messages = [context_message] + messages
-
-    response = llm_with_tools.invoke(messages)
+    memory_context = "; ".join(context_parts) if context_parts else "No saved user context."
+    prompt_messages = store_backed_prompt.invoke({
+        "memory_context": memory_context,
+        "messages": state["messages"],
+    }).messages
+    response = llm_with_tools.invoke(prompt_messages)
     return {"messages": [response]}
 
 # Build new workflow with Store-enabled agent
@@ -330,7 +341,7 @@ workflow_with_store.set_entry_point("agent")
 workflow_with_store.add_conditional_edges("agent", should_continue, {"tools": "tools", END: END})
 workflow_with_store.add_edge("tools", "agent")
 
-# Compile with BOTH checkpointer AND store access
+# Compile with CheckpointSaver; the manual example reads from the global store above
 agent_with_both = workflow_with_store.compile(checkpointer=checkpointer)
 
 print("✓ Agent with BOTH memory types built")
@@ -484,15 +495,21 @@ Guidelines:
 1. At the start of a conversation, check for relevant memories to personalize your response
 2. When the user shares personal details (department, role, preferences), save them
 3. When the user asks you to forget something, delete that specific memory
-4. Use search_policy_documents for company policy questions"""
+4. Use search_policy_documents for company policy questions
+5. Cite source file names when document search results include them
+6. Do not make up policy details or memory facts that you did not retrieve
+7. Answer in 2 short bullet points and end with one practical next step"""
 
 all_tools = [search_policy_documents] + memory_tools_list
 llm_with_all_tools = llm.bind_tools(all_tools)
+memory_agent_prompt = ChatPromptTemplate.from_messages([
+    ("system", MEMORY_SYSTEM_PROMPT),
+    MessagesPlaceholder("messages"),
+])
 
 def call_memory_agent(state: MessagesState, config: RunnableConfig):
-    system_msg = SystemMessage(content=MEMORY_SYSTEM_PROMPT)
-    messages = [system_msg] + state["messages"]
-    response = llm_with_all_tools.invoke(messages, config)
+    prompt_messages = memory_agent_prompt.invoke({"messages": state["messages"]}).messages
+    response = llm_with_all_tools.invoke(prompt_messages, config)
     return {"messages": [response]}
 
 workflow_memory = StateGraph(MessagesState)

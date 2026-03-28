@@ -31,11 +31,12 @@
 
 # Install required packages
 %pip install -q --upgrade \
-  mlflow[databricks]>=3.1.0 \
-  databricks-langchain>=0.8.0 \
-  databricks-vectorsearch>=0.30 \
-  langgraph>=0.2.50 \
-  langchain-core>=0.3.0
+  "databricks-sdk>=0.101,<0.103" \
+  "mlflow[databricks]>=3.10,<3.11" \
+  "databricks-langchain>=0.17,<0.18" \
+  "databricks-vectorsearch>=0.66,<0.67" \
+  "langgraph>=1.1,<1.2" \
+  "langchain-core>=1.2,<2"
 
 # COMMAND ----------
 
@@ -58,6 +59,7 @@ from langgraph.prebuilt import ToolNode
 
 # Configuration
 LLM_ENDPOINT = "databricks-claude-sonnet-4-6"
+EMBEDDING_ENDPOINT = "databricks-qwen3-embedding-0-6b"
 CATALOG = "agent_bootcamp"
 SCHEMA = "knowledge_assistant"
 DOCS_VOLUME = f"/Volumes/{CATALOG}/{SCHEMA}/docs"
@@ -259,7 +261,7 @@ try:
         pipeline_type="TRIGGERED",
         primary_key="chunk_id",
         embedding_source_column="chunk_text",
-        embedding_model_endpoint_name="databricks-gte-large-en"
+        embedding_model_endpoint_name=EMBEDDING_ENDPOINT
     )
     print(f"✓ Created index: {VECTOR_INDEX}")
 except Exception as e:
@@ -339,7 +341,6 @@ search_policy_documents = VectorSearchRetrieverTool(
         "policies, remote work, professional development, benefits, and equipment."
     ),
     columns=["source_file", "chunk_text"],
-    text_column="chunk_text",
     num_results=3,
 )
 

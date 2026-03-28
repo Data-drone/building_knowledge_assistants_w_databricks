@@ -27,7 +27,13 @@
 
 # COMMAND ----------
 
-%pip install -q --upgrade mlflow[databricks]>=3.1.0 databricks-sdk databricks-langchain[memory]>=0.8.0 databricks-vectorsearch>=0.30 langgraph>=0.2.50 langchain-core>=0.3.0
+%pip install -q --upgrade \
+  "databricks-sdk>=0.101,<0.103" \
+  "mlflow[databricks]>=3.10,<3.11" \
+  "databricks-langchain[memory]>=0.17,<0.18" \
+  "databricks-vectorsearch>=0.66,<0.67" \
+  "langgraph>=1.1,<1.2" \
+  "langchain-core>=1.2,<2"
 
 # COMMAND ----------
 
