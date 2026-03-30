@@ -2,7 +2,7 @@
 # MAGIC %md
 # MAGIC # Your First Agent on Databricks
 # MAGIC
-# MAGIC Build a simple AI agent in 15 minutes using Claude Sonnet 4.5, LangGraph, and MLflow!
+# MAGIC Build a simple AI agent in 15 minutes using Claude Sonnet 4.6, LangGraph, and MLflow!
 
 # COMMAND ----------
 

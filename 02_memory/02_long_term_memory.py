@@ -106,7 +106,6 @@ search_policy_documents = VectorSearchRetrieverTool(
         "policies, remote work, professional development, benefits, and equipment."
     ),
     columns=["source_file", "chunk_text"],
-    text_column="chunk_text",
     num_results=3,
 )
 
