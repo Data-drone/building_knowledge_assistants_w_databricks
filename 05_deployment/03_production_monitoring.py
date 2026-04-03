@@ -28,6 +28,8 @@
 
 # MAGIC %md
 # MAGIC ## Step 1: Install Dependencies
+# MAGIC
+# MAGIC Only MLflow and requests are needed here — the app does the heavy lifting.
 
 # COMMAND ----------
 
@@ -43,16 +45,24 @@ dbutils.library.restartPython()
 
 # MAGIC %md
 # MAGIC ## Step 2: Configuration
+# MAGIC
+# MAGIC Points at the same experiment the app writes traces to. All scorers and
+# MAGIC evaluation results land in this experiment.
 
 # COMMAND ----------
 
+import sys
 import requests
 import uuid
 import mlflow
 from typing import Literal
 
-APP_URL = "https://knowledge-assistant-agent-app-984752964297111.11.azure.databricksapps.com"
-EXPERIMENT_NAME = "/Shared/knowledge_assistant_agent_app"
+sys.path.append("/Workspace" + "/".join(dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get().split("/")[:-2]))
+
+from config import APP_EXPERIMENT, APP_NAME, get_app_url
+
+APP_URL = get_app_url(APP_NAME)
+EXPERIMENT_NAME = APP_EXPERIMENT
 OAUTH_TOKEN = dbutils.secrets.get("my-secrets", "apps_oauth_token")
 
 mlflow.set_experiment(EXPERIMENT_NAME)
@@ -108,6 +118,9 @@ for q in queries:
 
 # MAGIC %md
 # MAGIC ## Step 4: Quick Health Checks
+# MAGIC
+# MAGIC Before scoring quality, confirm that responses came back as JSON (not an
+# MAGIC HTML login page) and returned 200.
 
 # COMMAND ----------
 
@@ -124,6 +137,9 @@ if failures:
 
 # MAGIC %md
 # MAGIC ## Step 5: Inspect Recent MLflow Traces
+# MAGIC
+# MAGIC Confirm the app is writing traces before we score them. If no traces
+# MAGIC appear, the app experiment path may be misconfigured.
 
 # COMMAND ----------
 
@@ -144,9 +160,9 @@ if len(traces) > 0:
 # MAGIC %md
 # MAGIC ## Step 6: Understanding Scorers
 # MAGIC
-# MAGIC Scorers assess quality on MLflow traces and return feedback. The same
-# MAGIC scorer works for **batch evaluation** (during development) and **production
-# MAGIC monitoring** (on live traffic).
+# MAGIC Module 03 introduced these three scorer types for development-time evaluation.
+# MAGIC The same scorers also work for **production monitoring** on live traffic —
+# MAGIC you register them once and MLflow runs them automatically on new traces.
 # MAGIC
 # MAGIC | Type | When to use | Example |
 # MAGIC |------|-------------|---------|
@@ -154,7 +170,7 @@ if len(traces) > 0:
 # MAGIC | **Custom LLM judge** | Domain-specific evaluation with custom prompts | `make_judge(name=..., instructions=...)` |
 # MAGIC | **Code-based scorer** | Deterministic checks (length, format, keywords) | `@scorer` decorated function |
 # MAGIC
-# MAGIC We will create one of each type below, then register them for production
+# MAGIC We create one of each type below, then register them for production
 # MAGIC monitoring.
 
 # COMMAND ----------
@@ -203,7 +219,7 @@ clarity_judge = make_judge(
         "Return one of: excellent, good, fair, poor, very_poor."
     ),
     feedback_value_type=Literal["excellent", "good", "fair", "poor", "very_poor"],
-    model="databricks:/databricks-claude-sonnet-4-6",
+    model="endpoints:/databricks-claude-sonnet-4-6",
 )
 
 print("Custom LLM judge created: response_clarity")

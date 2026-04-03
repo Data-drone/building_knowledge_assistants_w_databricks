@@ -23,16 +23,22 @@
 
 # MAGIC %md
 # MAGIC ## Step 1: Configuration
+# MAGIC
+# MAGIC Same app name, experiment, and OAuth token used across Module 05.
 
 # COMMAND ----------
 
+import sys
 import requests
 import mlflow
 import uuid
 
-APP_NAME = "knowledge-assistant-agent-app"
-APP_URL = "https://knowledge-assistant-agent-app-984752964297111.11.azure.databricksapps.com"
-EXPERIMENT_NAME = "/Shared/knowledge_assistant_agent_app"
+sys.path.append("/Workspace" + "/".join(dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get().split("/")[:-2]))
+
+from config import APP_EXPERIMENT, APP_NAME, get_app_url
+
+APP_URL = get_app_url(APP_NAME)
+EXPERIMENT_NAME = APP_EXPERIMENT
 OAUTH_TOKEN = dbutils.secrets.get("my-secrets", "apps_oauth_token")
 
 mlflow.set_experiment(EXPERIMENT_NAME)
@@ -50,16 +56,17 @@ print("Experiment:", EXPERIMENT_NAME)
 # MAGIC
 # MAGIC ```bash
 # MAGIC cd databricks_agent_bootcamp
-# MAGIC DATABRICKS_USERNAME=$(databricks current-user me -p adb-984752964297111 -o json | jq -r '.userName')
+# MAGIC DATABRICKS_PROFILE=<your-databricks-profile>
+# MAGIC DATABRICKS_USERNAME=$(databricks current-user me -p "$DATABRICKS_PROFILE" -o json | jq -r '.userName')
 # MAGIC
-# MAGIC databricks sync -p adb-984752964297111 \
+# MAGIC databricks sync -p "$DATABRICKS_PROFILE" \
 # MAGIC   "apps/knowledge_assistant_agent" \
 # MAGIC   "/Users/$DATABRICKS_USERNAME/knowledge_assistant_agent_app"
 # MAGIC
-# MAGIC databricks apps deploy -p adb-984752964297111 knowledge-assistant-agent-app \
+# MAGIC databricks apps deploy -p "$DATABRICKS_PROFILE" knowledge-assistant-agent-app \
 # MAGIC   --source-code-path "/Workspace/Users/$DATABRICKS_USERNAME/knowledge_assistant_agent_app"
 # MAGIC
-# MAGIC databricks apps get -p adb-984752964297111 knowledge-assistant-agent-app -o json
+# MAGIC databricks apps get -p "$DATABRICKS_PROFILE" knowledge-assistant-agent-app -o json
 # MAGIC ```
 
 # COMMAND ----------
@@ -121,6 +128,9 @@ for label, payload in test_cases:
 
 # MAGIC %md
 # MAGIC ## Step 4: Gate Decision
+# MAGIC
+# MAGIC Same pass/fail gate pattern from Module 03 Step 16, now applied to the
+# MAGIC live endpoint. All validation requests must return 200 with JSON content.
 
 # COMMAND ----------
 
@@ -139,6 +149,10 @@ print("QUALITY GATE:", "PASSED" if gate_passed else "FAILED")
 
 # MAGIC %md
 # MAGIC ## Step 5: Confirm Trace Activity
+# MAGIC
+# MAGIC Check that the validation requests produced traces in the app experiment.
+# MAGIC If scorers are registered (from `03_production_monitoring.py`), feedback
+# MAGIC should start appearing on these traces automatically.
 
 # COMMAND ----------
 

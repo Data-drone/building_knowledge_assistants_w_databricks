@@ -1,14 +1,14 @@
 # Deployment - Production on Databricks Apps
 
-Deploy your agent to production with monitoring in under 45 minutes!
+Deploy your agent to production with monitoring in about 60-75 minutes!
 
 ## What You'll Learn
 
 This module teaches you to deploy and monitor your agent on Databricks Apps:
-1. **Notebook 01** (10 min): Apps Dev Loop - Day-to-day development workflow
-2. **Notebook 02** (15 min): Apps Deployment - Deploy and validate `/invocations`
-3. **Notebook 03** (10 min): Production Monitoring - MLflow traces + online evaluation
-4. **Notebook 04** (10 min): End-to-End Deployment - Full release pipeline
+1. **Notebook 01** (10-15 min): Apps Dev Loop - Day-to-day development workflow
+2. **Notebook 02** (10-15 min): Apps Deployment - Deploy and validate `/invocations`
+3. **Notebook 03** (20-25 min): Production Monitoring - MLflow traces + online evaluation
+4. **Notebook 04** (15-20 min): End-to-End Deployment - Full release pipeline
 
 ## Prerequisites
 
@@ -19,8 +19,8 @@ This module teaches you to deploy and monitor your agent on Databricks Apps:
 - OAuth token for testing
 
 ### Recommended
-- Completed [Module 03 (Evaluation)](../03_evaluation/README.md) for understanding scorers and judges
-- Completed [Module 04 (MCP Tools)](../04_mcp_tool_integration/README.md) for the full multi-tool agent
+- Completed [Module 03 (Evaluation)](../03_evaluation/README.md) for understanding the toy loop, traces, built-in scorers, and custom judges
+- Completed [Module 04 (Data Tools)](../04_mcp_tool_integration/README.md) for the full multi-tool agent
 
 ## Learning Path
 
@@ -35,7 +35,7 @@ This module teaches you to deploy and monitor your agent on Databricks Apps:
 - Passing `thread_id` and `user_id` for memory
 - OAuth token usage for notebook testing
 
-**Time**: 10 minutes
+**Time**: 10-15 minutes
 
 ---
 
@@ -49,7 +49,7 @@ This module teaches you to deploy and monitor your agent on Databricks Apps:
 - Validating short-term memory (`thread_id`) and long-term memory (`user_id`)
 - Production-style API checks from notebook and terminal
 
-**Time**: 15 minutes
+**Time**: 10-15 minutes
 
 ---
 
@@ -64,7 +64,7 @@ This module teaches you to deploy and monitor your agent on Databricks Apps:
 - Registering scorers for continuous production monitoring with sampling
 - Managing production scorers: list, update, stop, delete
 
-**Time**: 10 minutes
+**Time**: 20-25 minutes
 
 ---
 
@@ -78,28 +78,17 @@ This module teaches you to deploy and monitor your agent on Databricks Apps:
 - Validate `/invocations` end-to-end
 - Confirm monitoring signals in MLflow
 
-**Time**: 10 minutes
+**Time**: 15-20 minutes
 
 ---
 
-## What's Next?
+## What You'll Understand After This Module
 
-After completing these notebooks, you'll understand:
-- ✅ How to deploy agents as Databricks Apps
-- ✅ Day-to-day development loop for iterating
-- ✅ Endpoint validation and health checks
-- ✅ Production monitoring with scorers and judges
-- ✅ End-to-end release pipeline
-
----
-
-## Quick Start
-
-1. Open `01_apps_dev_loop.py`
-2. Set up the development loop (sync, deploy, verify)
-3. Continue to `02_apps_deployment.py` for deployment validation
-4. Add monitoring in `03_production_monitoring.py`
-5. Run the full pipeline in `04_end_to_end_deployment.py`
+- How to deploy agents as Databricks Apps
+- Day-to-day development loop for iterating
+- Endpoint validation and health checks
+- Production monitoring with built-in scorers, custom judges, and traces
+- End-to-end release pipeline
 
 ---
 
@@ -108,7 +97,7 @@ After completing these notebooks, you'll understand:
 - **LLM**: Databricks LLM endpoints (Claude Sonnet 4.6)
 - **Deployment**: Databricks Apps
 - **Monitoring**: MLflow Tracing + online evaluation
-- **Evaluation**: MLflow Evaluate with scorers and judges
+- **Evaluation**: MLflow Evaluate with built-in scorers and custom judges
 - **Memory**: Lakebase (autoscaling project/branch)
 - **App Runtime**: `mlflow.genai.agent_server.AgentServer`
 
@@ -121,6 +110,10 @@ The deployment artifact is the app source folder at
 [README](../apps/knowledge_assistant_agent/README.md) for the request contract,
 deploy commands, Lakebase permissions, and query examples.
 
+This module uses direct Apps commands from the notebooks and app README:
+`databricks sync` followed by `databricks apps deploy`. It does not rely on
+bundle deployment from `databricks.yml`.
+
 ---
 
 ## Need Help?
@@ -132,4 +125,4 @@ deploy commands, Lakebase permissions, and query examples.
 
 ---
 
-**Total Time**: 45 minutes from local agent to production deployment 🚀
+**Total Time**: ~60-75 minutes from local agent to production deployment
