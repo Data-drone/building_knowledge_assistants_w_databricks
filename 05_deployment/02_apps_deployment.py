@@ -47,16 +47,17 @@
 # MAGIC
 # MAGIC ```bash
 # MAGIC cd databricks_agent_bootcamp
-# MAGIC DATABRICKS_USERNAME=$(databricks current-user me -p adb-984752964297111 -o json | jq -r '.userName')
+# MAGIC DATABRICKS_PROFILE=<your-databricks-profile>
+# MAGIC DATABRICKS_USERNAME=$(databricks current-user me -p "$DATABRICKS_PROFILE" -o json | jq -r '.userName')
 # MAGIC
-# MAGIC databricks sync -p adb-984752964297111 \
+# MAGIC databricks sync -p "$DATABRICKS_PROFILE" \
 # MAGIC   "apps/knowledge_assistant_agent" \
 # MAGIC   "/Users/$DATABRICKS_USERNAME/knowledge_assistant_agent_app"
 # MAGIC
-# MAGIC databricks apps deploy -p adb-984752964297111 knowledge-assistant-agent-app \
+# MAGIC databricks apps deploy -p "$DATABRICKS_PROFILE" knowledge-assistant-agent-app \
 # MAGIC   --source-code-path "/Workspace/Users/$DATABRICKS_USERNAME/knowledge_assistant_agent_app"
 # MAGIC
-# MAGIC databricks apps get -p adb-984752964297111 knowledge-assistant-agent-app -o json
+# MAGIC databricks apps get -p "$DATABRICKS_PROFILE" knowledge-assistant-agent-app -o json
 # MAGIC ```
 
 # COMMAND ----------
@@ -68,7 +69,13 @@
 
 # COMMAND ----------
 
-APP_URL = "https://knowledge-assistant-agent-app-984752964297111.11.azure.databricksapps.com"
+import sys
+
+sys.path.append("/Workspace" + "/".join(dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get().split("/")[:-2]))
+
+from config import APP_NAME, get_app_url
+
+APP_URL = get_app_url(APP_NAME)
 OAUTH_TOKEN = dbutils.secrets.get("my-secrets", "apps_oauth_token")
 
 print("App URL:", APP_URL)
@@ -130,19 +137,21 @@ for label, request_body in [("Turn 1", request_turn_1), ("Turn 2", request_turn_
 
 # COMMAND ----------
 
+multi_thread_id = f"deploy-validation-{uuid.uuid4()}"
+
 test_cases = [
     (
         "Turn 1",
         {
             "input": [{"role": "user", "content": "How much vacation time do employees get?"}],
-            "custom_inputs": {"thread_id": thread_id, "user_id": user_id},
+            "custom_inputs": {"thread_id": multi_thread_id, "user_id": user_id},
         },
     ),
     (
         "Turn 2 (same thread)",
         {
             "input": [{"role": "user", "content": "What about sick leave?"}],
-            "custom_inputs": {"thread_id": thread_id, "user_id": user_id},
+            "custom_inputs": {"thread_id": multi_thread_id, "user_id": user_id},
         },
     ),
     (
@@ -182,7 +191,7 @@ print(f"\nValidation passed: {passed}/{len(test_cases)}")
 # MAGIC - If response body is HTML sign-in page, your token is invalid for Apps.
 # MAGIC - If you get repeated `403` responses, refresh the OAuth token in `my-secrets/apps_oauth_token`.
 # MAGIC - If request fails with 5xx, inspect app logs from terminal:
-# MAGIC   `databricks apps logs -p adb-984752964297111 knowledge-assistant-agent-app --tail-lines 200`
+# MAGIC   `databricks apps logs -p <your-databricks-profile> knowledge-assistant-agent-app --tail-lines 200`
 # MAGIC - This bootcamp uses Databricks Apps as the only deployment path.
 # MAGIC - Short-term memory requires `custom_inputs.thread_id` on each request.
 # MAGIC - Long-term memory requires `custom_inputs.user_id` to scope per-user facts in Lakebase.

@@ -1,6 +1,6 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # Module 04: Adding Data Query Capabilities with MCP
+# MAGIC # Module 04: Extending Your Agent with Data Tools
 # MAGIC
 # MAGIC ## What You'll Build
 # MAGIC Start with your RAG agent from Module 02, discover its limitations with structured data, then progressively add SQL and Genie MCP tools to handle both documents AND data queries.
@@ -24,16 +24,19 @@
 
 # MAGIC %md
 # MAGIC ## Step 1: Install Dependencies
+# MAGIC
+# MAGIC Same stack as prior modules. We add `langchain-core` explicitly since the
+# MAGIC tool decorator and message types come from there.
 
 # COMMAND ----------
 
 %pip install -q --upgrade \
-  "databricks-sdk>=0.101,<0.103" \
-  "mlflow[databricks]>=3.10,<3.11" \
-  "databricks-langchain[memory]>=0.17,<0.18" \
-  "databricks-vectorsearch>=0.66,<0.67" \
-  "langgraph>=1.1,<1.2" \
-  "langchain-core>=1.2,<2"
+  "databricks-sdk>=0.101" \
+  "mlflow[databricks]>=3.10" \
+  "databricks-langchain[memory]>=0.17" \
+  "databricks-vectorsearch>=0.66" \
+  "langgraph>=1.1" \
+  "langchain-core>=1.2"
 
 # COMMAND ----------
 
@@ -49,24 +52,25 @@ dbutils.library.restartPython()
 # COMMAND ----------
 
 import mlflow
-from databricks_langchain import ChatDatabricks, CheckpointSaver
-from databricks.vector_search.client import VectorSearchClient
+from databricks_langchain import ChatDatabricks, VectorSearchRetrieverTool
 from langchain_core.tools import tool
 from langchain_core.messages import HumanMessage
 from langgraph.graph import StateGraph, MessagesState, END
 from langgraph.prebuilt import ToolNode
 
-# Enable MLflow tracing
-mlflow.langchain.autolog()
-mlflow.tracing.enable()
-
-# Configuration - Use the sample data created in Module 00
+# ── Configuration ── edit these to match your workspace ──
 CATALOG = "agent_bootcamp"
 SCHEMA = "knowledge_assistant"
 LLM_ENDPOINT = "databricks-claude-sonnet-4-6"
-LAKEBASE_PROJECT = "knowledge-assistant-state"
+
 VECTOR_INDEX = f"{CATALOG}.{SCHEMA}.policy_index"
-ENDPOINT_NAME = "one-env-shared-endpoint-15"
+
+SQL_WAREHOUSE_ID = ""   # Your SQL warehouse ID (find in SQL Warehouses UI)
+GENIE_SPACE_ID = ""     # Paste from 00_setup.py output
+
+# Enable MLflow tracing
+mlflow.langchain.autolog()
+mlflow.tracing.enable()
 
 print("✅ Configuration loaded")
 
@@ -75,51 +79,32 @@ print("✅ Configuration loaded")
 # MAGIC %md
 # MAGIC ### Create the Vector Search Tool
 # MAGIC
-# MAGIC This tool searches policy documents (vacation policy, remote work policy, etc.).
+# MAGIC `VectorSearchRetrieverTool` from `databricks-langchain` is the recommended
+# MAGIC way to plug a Vector Search index into a LangChain/LangGraph agent. It
+# MAGIC handles querying, result formatting, and MLflow retriever tracing for you.
 
 # COMMAND ----------
 
-@tool
-def search_policy_documents(query: str) -> str:
-    """
-    Search company policy documents for information about vacation, leave,
-    remote work, professional development, and benefits.
-
-    Use this when the user asks about:
-    - Company policies
-    - HR procedures
-    - Benefits and perks
-    - Work arrangements
-
-    Args:
-        query: Natural language search query
-
-    Returns:
-        Relevant document excerpts
-    """
-    vsc = VectorSearchClient(disable_notice=True)
-    index = vsc.get_index(ENDPOINT_NAME, VECTOR_INDEX)
-
-    results = index.similarity_search(
-        query_text=query,
-        columns=["source_file", "chunk_text"],
-        num_results=3
-    )
-
-    formatted = []
-    for row in results.get("result", {}).get("data_array", []):
-        formatted.append(f"[Source: {row[0]}]\n{row[1]}\n")
-
-    return "\n".join(formatted) if formatted else "No relevant documents found."
+search_policy_documents = VectorSearchRetrieverTool(
+    index_name=VECTOR_INDEX,
+    tool_name="search_policy_documents",
+    tool_description=(
+        "Search company policy documents for information about vacation and leave "
+        "policies, remote work, professional development, benefits, and equipment."
+    ),
+    columns=["source_file", "chunk_text"],
+    num_results=3,
+)
 
 print("✅ Vector Search tool created")
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ### Build the Agent with Memory
+# MAGIC ### Build a Minimal Agent Graph
 # MAGIC
-# MAGIC Same pattern as Module 02: LLM + tools + CheckpointSaver.
+# MAGIC Same LangGraph pattern as Module 02 but without memory for now. We keep
+# MAGIC the graph simple so the focus stays on adding new tools, not state management.
 
 # COMMAND ----------
 
@@ -159,9 +144,9 @@ print("✅ RAG Agent built successfully (no memory yet - that comes later)")
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Step 3: Test the Agent - Show the Problem
+# MAGIC ## Step 3: Test the Agent — Show the Problem
 # MAGIC
-# MAGIC ### ✅ The agent works great for policy questions
+# MAGIC ### The agent handles policy questions well
 
 # COMMAND ----------
 
@@ -178,9 +163,11 @@ print("\n" + "="*80 + "\n")
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ### ❌ But the agent FAILS on structured data questions
+# MAGIC ### But it fails on structured data questions
 # MAGIC
-# MAGIC The agent has Vector Search for documents, but no way to query the `employee_data` or `leave_balances` tables.
+# MAGIC The agent has Vector Search for documents but no way to query the
+# MAGIC `employee_data` or `leave_balances` tables. Watch it try to answer
+# MAGIC from policy text instead of actual data.
 
 # COMMAND ----------
 
@@ -227,15 +214,15 @@ print("\n💡 Again, the agent can't query the leave_balances table!")
 
 # MAGIC %md
 # MAGIC ### Create SQL Execution Tool
+# MAGIC
+# MAGIC This wraps `statement_execution` from the Databricks SDK so the agent
+# MAGIC can run SELECT queries against employee tables. Only SELECTs are allowed.
 
 # COMMAND ----------
 
 from databricks.sdk import WorkspaceClient
 
 w = WorkspaceClient()
-
-# SQL Warehouse configuration
-SQL_WAREHOUSE_ID = "148ccb90800933a1"  # Shared Endpoint
 
 @tool
 def execute_sql_query(query: str) -> str:
@@ -250,10 +237,10 @@ def execute_sql_query(query: str) -> str:
 
     Available tables:
     - agent_bootcamp.knowledge_assistant.employee_data
-      Columns: employee_id, name, department, title, manager, hire_date
+      Columns: employee_id, name, department, role, hire_date
 
     - agent_bootcamp.knowledge_assistant.leave_balances
-      Columns: employee_id, vacation_available, sick_available, vacation_used_ytd, sick_used_ytd
+      Columns: employee_id, vacation_days_total, vacation_days_used, sick_days_total, sick_days_used
 
     Args:
         query: SQL SELECT query to execute
@@ -300,6 +287,9 @@ print("✅ SQL execution tool created")
 
 # MAGIC %md
 # MAGIC ### Rebuild Agent with SQL Tool
+# MAGIC
+# MAGIC Same graph shape, just a wider tool list. The LLM decides whether a
+# MAGIC question needs Vector Search or SQL based on the tool descriptions.
 
 # COMMAND ----------
 
@@ -327,9 +317,9 @@ print("✅ Agent rebuilt with SQL tool")
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Step 5: Test with SQL Tool - Show It Working
+# MAGIC ## Step 5: Test with SQL Tool
 # MAGIC
-# MAGIC Now the agent can query structured data! 🎉
+# MAGIC The same questions that failed before should now return real data.
 
 # COMMAND ----------
 
@@ -357,11 +347,11 @@ print(response["messages"][-1].content)
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ### 🎯 Check MLflow Traces
+# MAGIC ### Check MLflow Traces
 # MAGIC
 # MAGIC **Key observations in traces:**
 # MAGIC - Agent decides to call `execute_sql_query` tool
-# MAGIC - LLM generates the SQL query (e.g., `SELECT name, vacation_available FROM ...`)
+# MAGIC - LLM generates the SQL query (e.g., `SELECT name, vacation_days_total - vacation_days_used AS vacation_days_left FROM ...`)
 # MAGIC - Tool executes and returns results
 # MAGIC - Agent formats results into natural language response
 # MAGIC
@@ -405,11 +395,10 @@ print(response["messages"][-1].content)
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Step 7: Create Genie Space
+# MAGIC ## Step 7: Verify Genie Space
 # MAGIC
-# MAGIC A **Genie space** is a configured environment that knows about your tables and domain.
-# MAGIC
-# MAGIC **Note**: The Genie SDK API is evolving. If programmatic creation fails, use the UI method below.
+# MAGIC You created the Genie space in `00_setup.py`. This step confirms the
+# MAGIC space ID is set so the Genie tool can use it.
 
 # COMMAND ----------
 
@@ -426,16 +415,21 @@ TABLES = [
 print("="*80)
 print("GENIE SPACE SETUP")
 print("="*80)
-print("\nUsing the preconfigured Genie space for this workspace.")
-print("If you run this notebook elsewhere, create a Genie space with these tables:")
+print("\nUsing GENIE_SPACE_ID set at the top of this notebook.")
+print("If it is empty, run 04_mcp_tool_integration/00_setup.py and paste the generated space ID above.")
+print("The Genie space should include these tables:")
 for table in TABLES:
     print(f"   - {table}")
 print("="*80)
 
 # COMMAND ----------
 
-# Preconfigured Genie space for the bootcamp employee HR tables in this workspace.
-GENIE_SPACE_ID = "01f11fab4ab214e882b51c116b9945bc"
+if not GENIE_SPACE_ID:
+    raise ValueError(
+        "GENIE_SPACE_ID is empty. Run 04_mcp_tool_integration/00_setup.py, "
+        "copy the generated space ID into the GENIE_SPACE_ID variable at the top of this notebook, "
+        "and rerun."
+    )
 
 print(f"✅ Using Genie space: {GENIE_SPACE_ID}")
 
@@ -443,6 +437,10 @@ print(f"✅ Using Genie space: {GENIE_SPACE_ID}")
 
 # MAGIC %md
 # MAGIC ## Step 8: Create Genie Tool
+# MAGIC
+# MAGIC Unlike the SQL tool where the LLM writes raw SQL, this tool sends a
+# MAGIC natural-language question to Genie and gets back results. Genie handles
+# MAGIC schema resolution, SQL generation, and dialect differences internally.
 
 # COMMAND ----------
 

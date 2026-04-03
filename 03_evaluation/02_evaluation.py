@@ -29,6 +29,9 @@
 
 # MAGIC %md
 # MAGIC ## Step 1: Install Dependencies
+# MAGIC
+# MAGIC Same stack as the previous two notebooks. Pinned version ranges keep
+# MAGIC results reproducible across runs.
 
 # COMMAND ----------
 
@@ -45,6 +48,10 @@
 
 # MAGIC %md
 # MAGIC ## Step 2: Setup and Imports
+# MAGIC
+# MAGIC Config is hardcoded so the notebook is self-contained. We also enable
+# MAGIC autologging and tracing up front so every `agent.invoke()` later
+# MAGIC automatically produces traces linked to evaluation results.
 
 # COMMAND ----------
 
@@ -608,7 +615,7 @@ hr_accuracy_judge = make_judge(
         "Return one of: excellent, good, fair, poor, very_poor."
     ),
     feedback_value_type=Literal["excellent", "good", "fair", "poor", "very_poor"],
-    model=f"databricks:/{LLM_ENDPOINT}",
+    model=f"endpoints:/{LLM_ENDPOINT}",
 )
 
 policy_completeness_judge = make_judge(
@@ -619,7 +626,7 @@ policy_completeness_judge = make_judge(
         "Return one of: excellent, good, fair, poor, very_poor."
     ),
     feedback_value_type=Literal["excellent", "good", "fair", "poor", "very_poor"],
-    model=f"databricks:/{LLM_ENDPOINT}",
+    model=f"endpoints:/{LLM_ENDPOINT}",
 )
 
 print("✓ Custom judges created")
@@ -670,8 +677,10 @@ if results_df is not None:
 # MAGIC %md
 # MAGIC ## Step 11: Interpret the Final Results
 # MAGIC
-# MAGIC Look first at the custom HR judges, because those tell you whether the answer
-# MAGIC was actually right for your domain.
+# MAGIC Start with the custom HR judges — those tell you whether the answer was
+# MAGIC actually right for your domain. Then compare against the built-in scores.
+# MAGIC Rows where built-ins pass but custom judges flag issues are exactly the
+# MAGIC gaps that justified adding domain-specific judges in the first place.
 
 # COMMAND ----------
 
@@ -741,19 +750,20 @@ if agent_df is not None:
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Step 13: Test Multi-Turn Memory With Conversation-Level Evaluation
+# MAGIC ## Step 13: Generate a Multi-Turn Session for Conversation Evaluation
 # MAGIC
 # MAGIC You built memory in Module 02. But does memory actually help across conversation
 # MAGIC turns? Single-turn evaluation cannot answer that.
 # MAGIC
-# MAGIC Here we run a short multi-turn conversation, tag it with a session ID, and
-# MAGIC evaluate the full session with conversation-level scorers:
+# MAGIC Here we run a short multi-turn conversation and tag each turn with a session
+# MAGIC ID. This creates the trace data that conversation-level scorers need:
 # MAGIC
 # MAGIC - `ConversationCompleteness` — were all user questions answered by the end?
 # MAGIC - `KnowledgeRetention` — did the agent remember facts from earlier turns?
 # MAGIC
-# MAGIC These scorers are experimental in MLflow 3.10 and require traces with
-# MAGIC `mlflow.trace.session` metadata.
+# MAGIC We do not run those scorers here — the next step (ConversationSimulator)
+# MAGIC shows the full pattern. This step focuses on generating properly tagged
+# MAGIC multi-turn traces with `mlflow.trace.session` metadata.
 
 # COMMAND ----------
 
@@ -840,7 +850,6 @@ print("\nKey scorers for conversation evaluation:")
 print("  • ConversationCompleteness — were all user questions answered?")
 print("  • KnowledgeRetention — did the agent remember facts from earlier turns?")
 print("  • UserFrustration — did the user become frustrated?")
-print("  • ConversationalGuidelines — custom natural-language rules for conversations")
 
 # COMMAND ----------
 
@@ -911,7 +920,11 @@ print("  4. Re-run evaluation and confirm alignment improves")
 # MAGIC %md
 # MAGIC ## Step 16: Turn the Final Scorer Set Into Quality Gates
 # MAGIC
-# MAGIC Once you know which scorers matter, turn them into simple deployment checks.
+# MAGIC Once you know which scorers matter, turn them into deployment checks. A
+# MAGIC quality gate is a pass/fail function you run in CI before promoting a model
+# MAGIC or deploying a prompt change. If key scorers fail, the deploy is blocked.
+# MAGIC
+# MAGIC Module 05 applies this same pattern to the live Databricks App endpoint.
 
 # COMMAND ----------
 
@@ -997,8 +1010,8 @@ print("```")
 # MAGIC
 # MAGIC ### Next Steps
 # MAGIC
-# MAGIC Continue to **Module 04: MCP Tool Integration** to expand this bot with more
-# MAGIC tools such as Genie and UC Functions.
+# MAGIC Continue to **Module 04: Extending Your Agent with Data Tools** to add SQL,
+# MAGIC Genie, and custom tools to this bot.
 
 # COMMAND ----------
 
@@ -1011,4 +1024,4 @@ print("  ✓ Custom LLM judges for HR-specific gaps")
 print("  ✓ ToolCallCorrectness + ToolCallEfficiency for agent behavior")
 print("  ✓ Multi-turn conversation evaluation for memory testing")
 print("  ✓ Human feedback and quality gates")
-print("\nNext: continue to Module 04 for multi-tool agents.")
+print("\nNext: continue to Module 04 to extend the agent with data tools.")

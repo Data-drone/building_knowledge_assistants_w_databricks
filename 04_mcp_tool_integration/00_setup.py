@@ -1,6 +1,6 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # Module 04: MCP Tool Integration - Setup & Prerequisites
+# MAGIC # Module 04: Extending Your Agent with Data Tools - Setup & Prerequisites
 # MAGIC
 # MAGIC ## Module Overview
 # MAGIC
@@ -36,15 +36,17 @@
 
 # MAGIC %md
 # MAGIC ## Step 1: Install Dependencies
+# MAGIC
+# MAGIC Same core stack from earlier modules plus the Databricks SDK for Genie space creation.
 
 # COMMAND ----------
 
 %pip install -q --upgrade \
-  "databricks-sdk>=0.101,<0.103" \
-  "mlflow[databricks]>=3.10,<3.11" \
-  "databricks-langchain[memory]>=0.17,<0.18" \
-  "databricks-vectorsearch>=0.66,<0.67" \
-  "langgraph>=1.1,<1.2"
+  "databricks-sdk>=0.101" \
+  "mlflow[databricks]>=3.10" \
+  "databricks-langchain[memory]>=0.17" \
+  "databricks-vectorsearch>=0.66" \
+  "langgraph>=1.1"
 
 # COMMAND ----------
 
@@ -61,11 +63,23 @@ dbutils.library.restartPython()
 
 # COMMAND ----------
 
-import sys
-sys.path.append("/Workspace" + "/".join(dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get().split("/")[:-2]))
-
-from config import *
 from databricks.sdk import WorkspaceClient
+
+# ── Configuration ── edit these to match your workspace ──
+CATALOG = "agent_bootcamp"
+SCHEMA = "knowledge_assistant"
+LLM_ENDPOINT = "databricks-claude-sonnet-4-6"
+EMBEDDING_ENDPOINT = "databricks-gte-large-en"
+
+DOCS_VOLUME = f"/Volumes/{CATALOG}/{SCHEMA}/source_docs"
+EMPLOYEE_TABLE = f"{CATALOG}.{SCHEMA}.employee_data"
+LEAVE_BALANCES_TABLE = f"{CATALOG}.{SCHEMA}.leave_balances"
+
+VECTOR_INDEX = f"{CATALOG}.{SCHEMA}.policy_index"
+ENDPOINT_NAME = "one-env-shared-endpoint-15"  # Your Vector Search endpoint
+
+LAKEBASE_PROJECT = "knowledge-assistant-state"
+SQL_WAREHOUSE_ID = ""  # Your SQL warehouse ID (find in SQL Warehouses UI)
 
 w = WorkspaceClient()
 
@@ -77,7 +91,7 @@ print("=" * 80)
 try:
     spark.sql(f"USE CATALOG {CATALOG}")
     spark.sql(f"USE SCHEMA {SCHEMA}")
-    print(f"✅ Catalog and schema ready: {UC_NAMESPACE}")
+    print(f"✅ Catalog and schema ready: {CATALOG}.{SCHEMA}")
 except Exception as e:
     print(f"❌ Catalog/Schema missing: {e}")
     print("\n⚠️  You need to run: 00_foundations/00_setup.py first!")
@@ -192,48 +206,60 @@ print("\n✅ Vector Search assets verified!")
 
 # COMMAND ----------
 
-# Create Genie space for employee data
+import json, uuid
+
+if not SQL_WAREHOUSE_ID:
+    raise ValueError(
+        "SQL_WAREHOUSE_ID is required to create a Genie space. "
+        "Find it in the Databricks UI under SQL Warehouses and paste it into the "
+        "SQL_WAREHOUSE_ID variable at the top of this notebook."
+    )
+
+# Build the serialized_space payload — tables, instructions, and sample questions
+# in a single JSON structure (version 2 format).
+serialized_space = json.dumps({
+    "version": 2,
+    "data_sources": {
+        "tables": [
+            {"identifier": EMPLOYEE_TABLE, "description": ["Employee information: names, departments, roles, hire dates"]},
+            {"identifier": LEAVE_BALANCES_TABLE, "description": ["Leave balances: vacation and sick days (total vs used)"]},
+        ]
+    },
+    "instructions": {
+        "text_instructions": [
+            {
+                "id": uuid.uuid4().hex,
+                "content": [
+                    "This space contains employee HR data. "
+                    "Answer questions about employee counts by department, "
+                    "leave balances (vacation and sick days), and employee information. "
+                    "Be concise and specific, include relevant employee names, "
+                    "and calculate remaining leave days as (total - used)."
+                ],
+            }
+        ]
+    },
+    "config": {
+        "sample_questions": [
+            {"id": uuid.uuid4().hex, "question": ["How many employees are in each department?"]},
+            {"id": uuid.uuid4().hex, "question": ["Who has the most vacation days remaining?"]},
+        ]
+    },
+})
+
 try:
-    # Create space
-    space = w.genie.create_message_query_result(
-        space_name=f"{SCHEMA}_employee_data",
-        description="Employee data including employee information and leave balances. Use this to answer HR-related questions.",
+    space = w.genie.create_space(
+        warehouse_id=SQL_WAREHOUSE_ID,
+        serialized_space=serialized_space,
+        title=f"{SCHEMA}_employee_data",
+        description="Employee data for the Agent Bootcamp — HR questions via natural language.",
     )
 
     space_id = space.space_id
     print(f"✅ Created Genie space: {space_id}")
-
-    # Add tables to the space
-    w.genie.add_tables(
-        space_id=space_id,
-        table_full_names=[EMPLOYEE_TABLE, LEAVE_BALANCES_TABLE]
-    )
-    print(f"✅ Added tables to Genie space:")
-    print(f"   - {EMPLOYEE_TABLE}")
-    print(f"   - {LEAVE_BALANCES_TABLE}")
-
-    # Add instructions
-    instructions = """
-    This space contains employee HR data. Use it to answer questions about:
-    - Employee counts by department
-    - Leave balances (vacation and sick days)
-    - Employee information (names, roles, hire dates)
-
-    When answering:
-    - Be concise and specific
-    - Include relevant employee names
-    - Calculate remaining leave days (total - used)
-    """
-
-    w.genie.set_space_instructions(
-        space_id=space_id,
-        instructions=instructions
-    )
-    print(f"✅ Added instructions to Genie space")
-
-    # Update config.py with space ID
-    print(f"\n📝 Update config.py with this Genie space ID:")
-    print(f"   GENIE_SPACE_ID = \"{space_id}\"")
+    print(f"   Tables: {EMPLOYEE_TABLE}, {LEAVE_BALANCES_TABLE}")
+    print(f"\n📝 Paste this Genie space ID into 01_genie_integration.py:")
+    print(f'   GENIE_SPACE_ID = "{space_id}"')
 
 except Exception as e:
     print(f"❌ Failed to create Genie space: {e}")
@@ -286,7 +312,7 @@ except Exception as e:
 # MAGIC ```
 # MAGIC User Query: "Who in Engineering has the most vacation days left?"
 # MAGIC      ↓
-# MAGIC   Agent (LangGraph + Claude Sonnet 4.5)
+# MAGIC   Agent (LangGraph + Claude Sonnet 4.6)
 # MAGIC      ↓
 # MAGIC ┌──────────────┬─────────────┬─────────────────┬──────────────┐
 # MAGIC │              │             │                 │              │
@@ -320,7 +346,7 @@ print("=" * 80)
 print("MODULE 04 SETUP COMPLETE!")
 print("=" * 80)
 print("\n✅ Prerequisites Verified:")
-print(f"   - Unity Catalog: {UC_NAMESPACE}")
+print(f"   - Unity Catalog: {CATALOG}.{SCHEMA}")
 print(f"   - Employee tables: {EMPLOYEE_TABLE}, {LEAVE_BALANCES_TABLE}")
 print(f"   - Source documents: {len(dbutils.fs.ls(DOCS_VOLUME))} files")
 print(f"   - Vector Search endpoint: {ENDPOINT_NAME}")
@@ -332,7 +358,7 @@ print("   1. Continue to: 01_genie_integration.py")
 print("   2. Then: 02_custom_tools.py")
 
 print("\n💡 Remember:")
-print("   - Update config.py with your Genie space ID")
+print("   - Paste your Genie space ID into 01_genie_integration.py")
 print("   - Each notebook builds on the previous one")
 print("   - Test as you go!")
 

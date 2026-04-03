@@ -26,6 +26,9 @@
 
 # MAGIC %md
 # MAGIC ## Step 1: Install Dependencies
+# MAGIC
+# MAGIC Same core stack from earlier modules. If evaluation results look wrong later,
+# MAGIC version mismatches here are one of the first things to check.
 
 # COMMAND ----------
 
@@ -42,6 +45,9 @@
 
 # MAGIC %md
 # MAGIC ## Step 2: Configuration and Imports
+# MAGIC
+# MAGIC Everything is hardcoded here so the notebook stays self-contained. If you
+# MAGIC need to point at a different catalog or endpoint, this is the only cell to change.
 
 # COMMAND ----------
 
@@ -334,20 +340,14 @@ print("✓ Generated answers and formatted MLflow evaluation rows")
 # MAGIC %md
 # MAGIC ## Step 6: Run a Few Basic Built-In Scorers
 # MAGIC
-# MAGIC These three built-ins are a good default starter set for direct policy Q&A:
+# MAGIC Built-in scorers are the fastest way to get signal on response quality:
 # MAGIC
 # MAGIC - `RelevanceToQuery()` checks whether the answer stays focused on the user question
-# MAGIC - `Guidelines()` checks a few basic response rules we care about early
-# MAGIC - `Safety()` gives us a baseline guardrail, even for low-risk HR questions
+# MAGIC - `Guidelines()` lets us express simple natural-language rules (tone, grounding, etc.)
+# MAGIC - `Safety()` gives a baseline guardrail, even for low-risk HR questions
 # MAGIC
-# MAGIC Built-in scorers are the easiest way to get signal quickly:
-# MAGIC
-# MAGIC - `RelevanceToQuery()` checks for question-answer fit
-# MAGIC - `Guidelines()` lets us express simple natural-language requirements
-# MAGIC - `Safety()` checks for unsafe output
-# MAGIC
-# MAGIC We will keep the scorer set intentionally small here. Later, once we inspect a
-# MAGIC single run with traces, we will scale this up.
+# MAGIC We keep the scorer set small here. Later, once we inspect a single run with
+# MAGIC traces, we will scale this up.
 
 # COMMAND ----------
 

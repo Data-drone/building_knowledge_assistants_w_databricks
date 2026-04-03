@@ -1,4 +1,4 @@
-# MCP Tool Integration - Multi-Tool Agents
+# Extending Your Agent with Data Tools
 
 Add data query capabilities and custom tools to your agent in under 75 minutes!
 

@@ -432,20 +432,21 @@ for _, row in traces.iterrows():
 # MAGIC Once tracing works in a notebook, the production question becomes: "How do I keep
 # MAGIC the signal without creating too much cost or noise?"
 # MAGIC
-# MAGIC Two common answers are shown here:
-# MAGIC - async logging so tracing adds less latency
-# MAGIC - sampling so you trace a representative slice instead of every request
+# MAGIC Good news: MLflow trace export is already asynchronous by default — traces
+# MAGIC are batched and sent in the background, so tracing adds minimal latency to
+# MAGIC your agent calls.
+# MAGIC
+# MAGIC The main lever you control is **sampling**: trace a representative slice of
+# MAGIC requests instead of every single one. The manual approach below shows the
+# MAGIC idea. In production, MLflow's `ScorerSamplingConfig` (covered in Module 05)
+# MAGIC handles this for you when you register scorers for continuous monitoring.
 # MAGIC
 # MAGIC **When this matters:** these patterns are useful when:
 # MAGIC - you are moving from a demo notebook to a live app
-# MAGIC - tracing overhead starts to matter
 # MAGIC - you want observability without storing every single request
+# MAGIC - you need to control cost for LLM-based scorers on live traffic
 
 # COMMAND ----------
-
-mlflow.config.enable_async_logging()
-print("✓ Async logging enabled")
-
 
 def should_trace_request() -> bool:
     return random.random() < 0.1
@@ -459,7 +460,8 @@ for idx in range(5):
     else:
         print(f"Request {idx}: skipped by sampling")
 
-print("\n→ Sampling helps keep production tracing costs and volume under control.")
+print("\n→ Sampling keeps production tracing costs and volume under control.")
+print("→ In Module 05, ScorerSamplingConfig handles this declaratively.")
 
 # COMMAND ----------
 
@@ -471,7 +473,7 @@ print("\n→ Sampling helps keep production tracing costs and volume under contr
 # MAGIC - ✅ Traced one end-to-end agent run
 # MAGIC - ✅ Added manual helper spans with `@mlflow.trace`
 # MAGIC - ✅ Searched recent traces to inspect run patterns
-# MAGIC - ✅ Added production tracing patterns for async logging and sampling
+# MAGIC - ✅ Learned production tracing patterns: async export and sampling
 # MAGIC
 # MAGIC ### Why Tracing Comes Before Batch Evaluation
 # MAGIC

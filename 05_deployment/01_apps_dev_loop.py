@@ -10,7 +10,7 @@
 # MAGIC **Where this fits in Module 5:** Start here. This notebook establishes the inner development loop you will reuse in the rest of the module.
 # MAGIC
 # MAGIC **Prerequisites**
-# MAGIC - Databricks CLI configured for profile `adb-984752964297111`
+# MAGIC - Databricks CLI configured for a profile that can deploy Apps
 # MAGIC - Databricks App created once as `knowledge-assistant-agent-app`
 # MAGIC - App source code present under `apps/knowledge_assistant_agent`
 # MAGIC
@@ -59,18 +59,19 @@
 # MAGIC
 # MAGIC ```bash
 # MAGIC cd databricks_agent_bootcamp
+# MAGIC DATABRICKS_PROFILE=<your-databricks-profile>
 # MAGIC
 # MAGIC # Sync local app source to workspace files
-# MAGIC DATABRICKS_USERNAME=$(databricks current-user me -p adb-984752964297111 -o json | jq -r '.userName')
-# MAGIC databricks sync -p adb-984752964297111 \
+# MAGIC DATABRICKS_USERNAME=$(databricks current-user me -p "$DATABRICKS_PROFILE" -o json | jq -r '.userName')
+# MAGIC databricks sync -p "$DATABRICKS_PROFILE" \
 # MAGIC   "apps/knowledge_assistant_agent" \
 # MAGIC   "/Users/$DATABRICKS_USERNAME/knowledge_assistant_agent_app"
 # MAGIC
 # MAGIC # Create app once
-# MAGIC databricks apps create -p adb-984752964297111 knowledge-assistant-agent-app
+# MAGIC databricks apps create -p "$DATABRICKS_PROFILE" knowledge-assistant-agent-app
 # MAGIC
 # MAGIC # Deploy
-# MAGIC databricks apps deploy -p adb-984752964297111 knowledge-assistant-agent-app \
+# MAGIC databricks apps deploy -p "$DATABRICKS_PROFILE" knowledge-assistant-agent-app \
 # MAGIC   --source-code-path "/Workspace/Users/$DATABRICKS_USERNAME/knowledge_assistant_agent_app"
 # MAGIC ```
 
@@ -83,16 +84,17 @@
 # MAGIC
 # MAGIC ```bash
 # MAGIC cd databricks_agent_bootcamp
-# MAGIC DATABRICKS_USERNAME=$(databricks current-user me -p adb-984752964297111 -o json | jq -r '.userName')
+# MAGIC DATABRICKS_PROFILE=<your-databricks-profile>
+# MAGIC DATABRICKS_USERNAME=$(databricks current-user me -p "$DATABRICKS_PROFILE" -o json | jq -r '.userName')
 # MAGIC
-# MAGIC databricks sync -p adb-984752964297111 \
+# MAGIC databricks sync -p "$DATABRICKS_PROFILE" \
 # MAGIC   "apps/knowledge_assistant_agent" \
 # MAGIC   "/Users/$DATABRICKS_USERNAME/knowledge_assistant_agent_app"
 # MAGIC
-# MAGIC databricks apps deploy -p adb-984752964297111 knowledge-assistant-agent-app \
+# MAGIC databricks apps deploy -p "$DATABRICKS_PROFILE" knowledge-assistant-agent-app \
 # MAGIC   --source-code-path "/Workspace/Users/$DATABRICKS_USERNAME/knowledge_assistant_agent_app"
 # MAGIC
-# MAGIC databricks apps logs -p adb-984752964297111 knowledge-assistant-agent-app --tail-lines 120
+# MAGIC databricks apps logs -p "$DATABRICKS_PROFILE" knowledge-assistant-agent-app --tail-lines 120
 # MAGIC ```
 
 # COMMAND ----------
@@ -103,11 +105,12 @@
 # MAGIC Databricks Apps require OAuth token auth. Save one into a secret:
 # MAGIC
 # MAGIC ```bash
-# MAGIC TOKEN=$(databricks auth token --profile adb-984752964297111 -o json | jq -r '.access_token // .token_value // .token')
-# MAGIC databricks secrets create-scope my-secrets --profile adb-984752964297111 || true
+# MAGIC DATABRICKS_PROFILE=<your-databricks-profile>
+# MAGIC TOKEN=$(databricks auth token --profile "$DATABRICKS_PROFILE" -o json | jq -r '.access_token // .token_value // .token')
+# MAGIC databricks secrets create-scope my-secrets --profile "$DATABRICKS_PROFILE" || true
 # MAGIC databricks secrets put-secret my-secrets apps_oauth_token \
 # MAGIC   --string-value "$TOKEN" \
-# MAGIC   --profile adb-984752964297111
+# MAGIC   --profile "$DATABRICKS_PROFILE"
 # MAGIC ```
 
 # COMMAND ----------
@@ -123,10 +126,15 @@
 
 # COMMAND ----------
 
+import sys
 import requests
 import uuid
 
-APP_URL = "https://knowledge-assistant-agent-app-984752964297111.11.azure.databricksapps.com"
+sys.path.append("/Workspace" + "/".join(dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get().split("/")[:-2]))
+
+from config import APP_NAME, get_app_url
+
+APP_URL = get_app_url(APP_NAME)
 OAUTH_TOKEN = dbutils.secrets.get("my-secrets", "apps_oauth_token")
 THREAD_ID = f"apps-dev-loop-{uuid.uuid4()}"
 FRESH_THREAD_ID = f"apps-dev-loop-{uuid.uuid4()}"
@@ -180,5 +188,5 @@ for label, payload in [
 # MAGIC - If you get HTML login content, your token is not valid OAuth for Apps.
 # MAGIC - If you get `403` from `/invocations`, refresh your OAuth token and update the secret.
 # MAGIC - If app returns 502, check logs:
-# MAGIC   `databricks apps logs -p adb-984752964297111 knowledge-assistant-agent-app --tail-lines 200`
+# MAGIC   `databricks apps logs -p <your-databricks-profile> knowledge-assistant-agent-app --tail-lines 200`
 # MAGIC - If startup fails after code changes, redeploy and inspect the first stack trace in logs.

@@ -90,14 +90,15 @@ Implement observability and evaluation.
 
 | Notebook | Topics | Duration |
 |----------|--------|----------|
-| [01_tracing.py](03_evaluation/01_tracing.py) | MLflow tracing, span analysis | 15 min |
-| [02_evaluation.py](03_evaluation/02_evaluation.py) | Built-in scorers, custom judges, quality gates | 30 min |
+| [00_first_eval_loop.py](03_evaluation/00_first_eval_loop.py) | MLflow eval rows, basic built-in scorers | 15 min |
+| [01_tracing.py](03_evaluation/01_tracing.py) | MLflow tracing, one-run inspection | 15 min |
+| [02_evaluation.py](03_evaluation/02_evaluation.py) | Built-in scorers first, custom judges second, quality gates | 30 min |
 
-**You'll build:** Comprehensive evaluation framework with scorers and judges
+**You'll build:** A natural evaluation workflow from toy loop to production-style scoring
 
 ---
 
-### Module 4: MCP Tool Integration (75 min)
+### Module 4: Extending Your Agent with Data Tools (75 min)
 Learn how to add data query capabilities and custom tools to your agents.
 
 | Notebook | Topics | Duration |
@@ -156,13 +157,21 @@ Deploy your agent to production on Databricks Apps.
    cd databricks_agent_bootcamp
    ```
 
-2. **Update configuration in [config.py](config.py):**
+2. **Update the shared setup values in [config.py](config.py):**
    ```python
-   CATALOG = "agent_bootcamp"           # Your catalog name
-   SCHEMA = "knowledge_assistant"       # Your schema name
+   CATALOG = "agent_bootcamp"                     # Your catalog name
+   SCHEMA = "knowledge_assistant"                 # Your schema name
    HOST = "https://your-workspace.cloud.databricks.com"
-   REGION = "us-west-2"                 # Your cloud region
+   REGION = "us-west-2"                           # Your cloud region
+   LLM_ENDPOINT = "databricks-claude-sonnet-4-6"
+   EMBEDDING_ENDPOINT = "databricks-gte-large-en"
+   LAKEBASE_PROJECT = "knowledge-assistant-state"
+   LAKEBASE_BRANCH = "development"
+   GENIE_SPACE_ID = ""                            # Fill after Module 04 setup
    ```
+
+   Later modules mostly carry small local config blocks for teaching clarity, so you do
+   not need to keep expanding `config.py` for every notebook.
 
 3. **Run the setup notebook (15 minutes):**
    - Open [00_foundations/00_setup.py](00_foundations/00_setup.py)
@@ -173,6 +182,11 @@ Deploy your agent to production on Databricks Apps.
    - Start with Module 0 (Foundations)
    - Progress through modules sequentially
    - Each "driver" notebook demonstrates the complete agent
+
+**Deployment note:** Module 5 uses direct Databricks Apps commands
+(`databricks sync` + `databricks apps deploy`) from
+`apps/knowledge_assistant_agent`. The repo's `databricks.yml` is only a minimal
+workspace/extension config, not the main deployment workflow taught here.
 
 ---
 
@@ -248,12 +262,12 @@ By the end of this bootcamp, you'll have built a production-ready **Internal Kno
 ```
 databricks_agent_bootcamp/
 ├── config.py                       # Shared configuration
-├── databricks.yml                  # Databricks asset bundle definition
+├── databricks.yml                  # Minimal Databricks workspace/extension config
 ├── 00_foundations/                  # Platform basics
 ├── 01_rag_pipeline/                # Vector Search + documents
 ├── 02_memory/                      # Lakebase checkpointing
-├── 03_evaluation/                  # MLflow judges + scorers
-├── 04_mcp_tool_integration/        # Genie + custom MCP tools
+├── 03_evaluation/                  # Toy evals, tracing, scorers, judges
+├── 04_mcp_tool_integration/        # SQL, Genie, and custom tools
 ├── 05_deployment/                  # Production monitoring + eval
 └── apps/
     └── knowledge_assistant_agent/  # Canonical Databricks Apps runtime

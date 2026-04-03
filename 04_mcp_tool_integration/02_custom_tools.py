@@ -4,20 +4,19 @@
 # MAGIC
 # MAGIC ## Two Learning Paths
 # MAGIC
-# MAGIC **🎓 Path A: Quick Start (30 min)**
-# MAGIC - Section 1: When to Build Custom Tools (5 min)
-# MAGIC - Section 2: Simple Custom Tool (10 min)
-# MAGIC - Section 5: Deploy to Production (15 min)
-# MAGIC - Skip Sections 3-4 for now
+# MAGIC **Path A — Quick Start (30 min):**
+# MAGIC Sections 1, 2, and 5. Covers when to build custom tools, how to write one,
+# MAGIC and how to deploy it as a Databricks App. Skip Sections 3-4.
 # MAGIC
-# MAGIC **🔬 Path B: Deep Dive (50 min)**
-# MAGIC - All sections: Complete understanding
-# MAGIC - Section 3: MCP Server Concepts (10 min)
-# MAGIC - Section 4: Local MCP Server Testing (10 min)
-# MAGIC - Section 5: Deploy to Production (15 min)
+# MAGIC **Path B — Deep Dive (50 min):**
+# MAGIC All sections. Adds MCP server architecture concepts (Section 3) and
+# MAGIC local server testing (Section 4) before production deployment.
 # MAGIC
 # MAGIC ## What You'll Build
-# MAGIC Learn how to build custom MCP tools and deploy them to production as Databricks Apps.
+# MAGIC - Decide when a custom tool is needed vs managed MCP (Genie, SQL, UC Functions)
+# MAGIC - Build a simple custom tool with the `@tool` decorator
+# MAGIC - Package it as a FastMCP server and deploy to Databricks Apps
+# MAGIC - Connect the deployed server back to a LangChain agent
 # MAGIC
 # MAGIC ## Prerequisites
 # MAGIC - Completed [01_genie_integration.py](01_genie_integration.py)
@@ -27,16 +26,21 @@
 
 # MAGIC %md
 # MAGIC ## Step 1: Install Dependencies
+# MAGIC
+# MAGIC In addition to the usual stack, this notebook adds three new packages:
+# MAGIC - `mcp` — the MCP protocol client/server library
+# MAGIC - `databricks-mcp` — Databricks-specific MCP helpers (OAuth, transport)
+# MAGIC - `nest_asyncio` — allows async MCP calls inside notebook event loops
 
 # COMMAND ----------
 
 %pip install -q --upgrade \
-  "databricks-sdk>=0.101,<0.103" \
-  "mlflow[databricks]>=3.10,<3.11" \
-  "databricks-langchain[memory]>=0.17,<0.18" \
-  "databricks-vectorsearch>=0.66,<0.67" \
-  "langgraph>=1.1,<1.2" \
-  "langchain-core>=1.2,<2" \
+  "databricks-sdk>=0.101" \
+  "mlflow[databricks]>=3.10" \
+  "databricks-langchain[memory]>=0.17" \
+  "databricks-vectorsearch>=0.66" \
+  "langgraph>=1.1" \
+  "langchain-core>=1.2" \
   mcp \
   databricks-mcp \
   nest_asyncio
@@ -51,17 +55,17 @@ dbutils.library.restartPython()
 # MAGIC ## Section 1: When to Build Custom Tools (5 min)
 # MAGIC
 # MAGIC ### Use Managed MCPs When:
-# MAGIC - ✅ Querying Databricks tables (SQL, Genie)
-# MAGIC - ✅ Calling Unity Catalog Functions
-# MAGIC - ✅ Standard Databricks operations
-# MAGIC - ✅ You want zero setup and production-ready tools
+# MAGIC - Querying Databricks tables (SQL, Genie)
+# MAGIC - Calling Unity Catalog Functions
+# MAGIC - Standard Databricks operations
+# MAGIC - You want zero setup and production-ready tools
 # MAGIC
 # MAGIC ### Build Custom Tools When:
-# MAGIC - 🔧 Wrapping external APIs (weather, stock prices, news)
-# MAGIC - 🔧 Custom business logic not in UC Functions
-# MAGIC - 🔧 Third-party integrations (Slack, Salesforce, GitHub)
-# MAGIC - 🔧 Rate limiting or caching layer needed
-# MAGIC - 🔧 Legacy system integration
+# MAGIC - Wrapping external APIs (weather, stock prices, news)
+# MAGIC - Custom business logic not in UC Functions
+# MAGIC - Third-party integrations (Slack, Salesforce, GitHub)
+# MAGIC - Rate limiting or caching layer needed
+# MAGIC - Legacy system integration
 
 # COMMAND ----------
 
@@ -250,11 +254,12 @@ print("✅ Agent successfully used the custom tool!")
 # MAGIC %md
 # MAGIC ---
 # MAGIC
-# MAGIC ## 🎓 Quick Start Path: Jump to Section 5 Now!
+# MAGIC ## Quick Start Path: Jump to Section 5
 # MAGIC
-# MAGIC **If you're following the Quick Start path (Path A), skip to [Section 5: Deploy to Production](#Section-5:-Deploy-MCP-Server-to-Production-(15-min))** ⬇️
+# MAGIC If you are following Path A, scroll down to **Section 5: Deploy MCP Server
+# MAGIC to Production** and skip Sections 3-4.
 # MAGIC
-# MAGIC **For Deep Dive path (Path B), continue below** ⬇️
+# MAGIC For Path B, continue below.
 # MAGIC
 # MAGIC ---
 
@@ -797,77 +802,37 @@ else:
 # MAGIC %md
 # MAGIC ### Step 5.7: Connect to Your Deployed Server
 # MAGIC
-# MAGIC Once deployment shows **SUCCEEDED** above, we can connect to our MCP server using the
-# MAGIC `DatabricksMCPClient`. But first, we need to understand **authentication**.
+# MAGIC Once deployment shows **SUCCEEDED** above, connect to the MCP server.
 # MAGIC
-# MAGIC ---
+# MAGIC #### Why OAuth Is Required
 # MAGIC
-# MAGIC #### 🔐 Why OAuth Is Required
-# MAGIC
-# MAGIC Databricks Apps sit behind a **secure proxy** that enforces **OAuth** authentication.
-# MAGIC This is different from how most Databricks SDK calls work inside a notebook:
+# MAGIC Databricks Apps enforce OAuth authentication. The notebook's default session
+# MAGIC token is not an OAuth token, so `WorkspaceClient()` alone cannot reach the
+# MAGIC app. You need a **service principal** with OAuth M2M credentials.
 # MAGIC
 # MAGIC | Context | Auth Method | Works with MCP Apps? |
 # MAGIC |---|---|---|
-# MAGIC | Notebook default (`WorkspaceClient()`) | Session token (PAT-like) | ❌ No |
-# MAGIC | Local CLI (`databricks auth login`) | OAuth U2M (user-to-machine) | ✅ Yes |
-# MAGIC | **Service Principal** (`client_id` + `client_secret`) | **OAuth M2M (machine-to-machine)** | **✅ Yes** |
-# MAGIC | Agent Serving (on-behalf-of-user) | OAuth via `ModelServingUserCredentials` | ✅ Yes |
+# MAGIC | Notebook default (`WorkspaceClient()`) | Session token | No |
+# MAGIC | Service Principal (`client_id` + `client_secret`) | OAuth M2M | Yes |
+# MAGIC | Agent Serving (on-behalf-of-user) | OAuth via `ModelServingUserCredentials` | Yes |
 # MAGIC
-# MAGIC When you run `WorkspaceClient()` in a notebook, it uses the notebook's built-in session
-# MAGIC token — which is **not** an OAuth token. That's why connecting directly fails with:
+# MAGIC #### One-Time Setup: Create a Service Principal
 # MAGIC
-# MAGIC ```
-# MAGIC ValueError: OAuth authentication is required for MCP servers hosted on Databricks Apps.
-# MAGIC ```
+# MAGIC 1. **Settings → Identity and access → Service principals → Add new** (name it `mcp-bootcamp-sp`)
+# MAGIC 2. **Secrets tab → Generate secret** — copy both the Client ID and Client Secret immediately
+# MAGIC 3. **Entitlements tab** — enable Workspace access
+# MAGIC 4. **Compute → Apps → your app → Permissions** — add the SP with Can Use
 # MAGIC
-# MAGIC **The solution:** Create a **service principal** and use its OAuth credentials to authenticate.
+# MAGIC #### How the Code Below Works
 # MAGIC
-# MAGIC ---
+# MAGIC Two `WorkspaceClient` instances are used:
+# MAGIC 1. Default client — looks up the app URL via notebook token
+# MAGIC 2. OAuth client — authenticates as the service principal
 # MAGIC
-# MAGIC #### 🛠️ One-Time Setup: Create a Service Principal
+# MAGIC We use the low-level `streamablehttp_client` + `DatabricksOAuthClientProvider`
+# MAGIC instead of `DatabricksMCPClient` to avoid a known `httpx` issue in notebooks.
 # MAGIC
-# MAGIC A **service principal** (SP) is a non-human identity that can authenticate to Databricks
-# MAGIC via OAuth. You (or your workspace admin) need to create one:
-# MAGIC
-# MAGIC **Step A — Create the Service Principal:**
-# MAGIC 1. In the Databricks workspace, go to **Settings** (gear icon, top-right)
-# MAGIC 2. Click **Identity and access → Service principals**
-# MAGIC 3. Click **Add service principal → Add new**
-# MAGIC 4. Give it a name (e.g., `mcp-bootcamp-sp`) and click **Add**
-# MAGIC
-# MAGIC **Step B — Generate an OAuth Secret:**
-# MAGIC 1. Click on the service principal you just created
-# MAGIC 2. Go to the **Secrets** tab
-# MAGIC 3. Click **Generate secret**
-# MAGIC 4. **Copy both values immediately** — the secret will not be shown again:
-# MAGIC    - **Client ID** (UUID format, e.g., `a1b2c3d4-...`)
-# MAGIC    - **Client Secret** (long string)
-# MAGIC
-# MAGIC **Step C — Grant Entitlements & App Permission:**
-# MAGIC 1. On the service principal page, go to the **Entitlements** tab
-# MAGIC 2. Enable **Workspace access** (required for OAuth to Databricks Apps)
-# MAGIC 3. Go to **Compute → Apps** in the left sidebar
-# MAGIC 4. Click on your app (`my-weather-mcp-server`)
-# MAGIC 5. Go to the **Permissions** tab
-# MAGIC 6. Add the service principal with **Can Manage** or **Can Use** permission
-# MAGIC
-# MAGIC ---
-# MAGIC
-# MAGIC #### 💻 How the Code Below Works
-# MAGIC
-# MAGIC We use **two** `WorkspaceClient` instances and the low-level MCP protocol:
-# MAGIC 1. **Default client** (`WorkspaceClient()`) — uses the notebook token to look up the app URL
-# MAGIC 2. **OAuth client** (`WorkspaceClient(host=..., client_id=..., client_secret=...)`) — authenticates
-# MAGIC    as the service principal via `DatabricksOAuthClientProvider`
-# MAGIC 3. **Streamable HTTP transport** (`mcp.client.streamable_http`) — connects to the MCP endpoint
-# MAGIC
-# MAGIC **Note:** We use the low-level `streamablehttp_client` + `DatabricksOAuthClientProvider` instead of
-# MAGIC `DatabricksMCPClient` because the higher-level client has a known `httpx.UnsupportedProtocol` issue
-# MAGIC in notebook environments. The low-level approach gives us direct control over the async transport.
-# MAGIC
-# MAGIC The widgets below will prompt you for the service principal credentials.
-# MAGIC For production, store these in **Databricks Secrets** (`dbutils.secrets.get(scope, key)`).
+# MAGIC For production, store SP credentials in **Databricks Secrets** instead of widgets.
 
 # COMMAND ----------
 
@@ -947,7 +912,9 @@ mcp_tools = asyncio.run(test_mcp_connection())
 # MAGIC %md
 # MAGIC ### Step 5.8: Use in Your Agent
 # MAGIC
-# MAGIC Now use this MCP server in any agent:
+# MAGIC To use the deployed MCP server from a LangChain agent, wrap each MCP tool
+# MAGIC as a `@tool` function that calls the server over the streamable HTTP transport.
+# MAGIC The agent sees a normal LangChain tool; the MCP call happens inside.
 
 # COMMAND ----------
 

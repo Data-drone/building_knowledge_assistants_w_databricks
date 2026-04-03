@@ -62,7 +62,7 @@ After completing these notebooks, you'll understand:
 **For production features** (covered in later modules):
 - **Module 02**: Conversation memory with Lakebase
 - **Module 03**: Evaluation and metrics
-- **Module 04**: Multi-tool agents (Genie, UC Functions)
+- **Module 04**: Extending with data tools (SQL, Genie, custom tools)
 - **Module 05**: Deployment to Databricks Apps
 
 ---

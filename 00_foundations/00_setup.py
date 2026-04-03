@@ -25,7 +25,7 @@
 # MAGIC
 # MAGIC ## How These Assets Show Up Later
 # MAGIC - **Module 01 (RAG)** uses the seeded policy documents to build a Vector Search index
-# MAGIC - **Module 04 (MCP tools)** uses the employee tables and `get_employee` UC function as governed tools
+# MAGIC - **Module 04 (Data tools)** uses the employee tables and `get_employee` UC function as governed tools
 # MAGIC - **Module 02 (Memory)** uses the Lakebase project for short-term and long-term memory
 # MAGIC
 # MAGIC ## Prerequisites

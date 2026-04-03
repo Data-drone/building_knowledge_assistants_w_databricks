@@ -84,7 +84,7 @@ After completing these notebooks, you'll understand:
 ### Continue Learning
 
 **For production deployment**:
-- **Module 04**: Multi-tool agents (Genie, UC Functions)
+- **Module 04**: Extending with data tools (SQL, Genie, custom tools)
 - **Module 05**: Deployment to Databricks Apps
 
 ---
@@ -179,7 +179,6 @@ results = mlflow.genai.evaluate(
 ### 1. Observability Stack
 ```python
 mlflow.tracing.enable()
-mlflow.config.enable_async_logging()
 
 @mlflow.trace
 def traced_helper():
@@ -211,7 +210,7 @@ hr_accuracy_judge = make_judge(
     name="hr_accuracy",
     instructions="Compare {{ outputs }} to {{ expectations }} for HR policy accuracy.",
     feedback_value_type=Literal["excellent", "good", "fair", "poor", "very_poor"],
-    model=f"databricks:/{LLM_ENDPOINT}",
+    model=f"endpoints:/{LLM_ENDPOINT}",
 )
 
 results = mlflow.genai.evaluate(
