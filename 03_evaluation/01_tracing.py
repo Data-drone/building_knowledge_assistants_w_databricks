@@ -7,7 +7,7 @@
 # MAGIC you carried forward from Module 02 and `00_first_eval_loop.py`.
 # MAGIC
 # MAGIC ## Learning Objectives
-# MAGIC - Enable MLflow tracing for a LangGraph agent
+# MAGIC - Enable MLflow tracing with `mlflow.langchain.autolog()`
 # MAGIC - Inspect one run end-to-end before doing batch evaluation
 # MAGIC - Add targeted `@mlflow.trace` spans for custom debugging
 # MAGIC - Use trace search to answer practical debugging questions
@@ -48,10 +48,17 @@
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Step 2: Configuration and Imports
+# MAGIC ## Step 2: Configuration, Imports, and Tracing Setup
 # MAGIC
 # MAGIC This step keeps the notebook self-contained: the catalog, schema, endpoint, and
 # MAGIC experiment path are all visible in one place.
+# MAGIC
+# MAGIC We also enable tracing here with `mlflow.langchain.autolog()`. This hooks into
+# MAGIC LangGraph and LangChain so every `agent.invoke()` call automatically produces
+# MAGIC a trace with the full execution tree — model calls, tool calls, and graph steps.
+# MAGIC
+# MAGIC Tracing answers a different question than evaluation: instead of asking
+# MAGIC "did this answer pass?", we ask "what happened inside this specific run?"
 # MAGIC
 # MAGIC **When this matters:** tracing bugs are often not really tracing bugs. They are
 # MAGIC often configuration bugs:
@@ -110,9 +117,10 @@ def normalize_text(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
 
 
+mlflow.set_experiment(EXPERIMENT_NAME)
 mlflow.langchain.autolog()
 
-print("✓ Configuration loaded")
+print("✓ Configuration loaded, tracing enabled")
 print(f"  Experiment: {EXPERIMENT_NAME}")
 
 # COMMAND ----------
@@ -274,32 +282,7 @@ print(f"  Tools: {[tool.name for tool in all_tools]}")
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Step 4: Enable MLflow Tracing
-# MAGIC
-# MAGIC Tracing answers a different question than the toy loop:
-# MAGIC instead of asking \"did this answer pass?\", we ask
-# MAGIC \"what happened inside this specific run?\"
-# MAGIC
-# MAGIC After tracing is enabled, MLflow starts capturing the execution tree for traced
-# MAGIC frameworks like LangGraph and LangChain.
-# MAGIC
-# MAGIC **When this matters:** this is the first thing to turn on when:
-# MAGIC - the agent gives a surprising answer
-# MAGIC - the response is slower than expected
-# MAGIC - you need to see whether a tool was called at all
-
-# COMMAND ----------
-
-mlflow.set_experiment(EXPERIMENT_NAME)
-mlflow.tracing.enable()
-
-print("✓ MLflow tracing enabled")
-print(f"  Experiment: {EXPERIMENT_NAME}")
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## Step 5: Inspect One Run End-to-End
+# MAGIC ## Step 4: Inspect One Run End-to-End
 # MAGIC
 # MAGIC Start with a single question and a single run before looking at averages or
 # MAGIC score tables. One trace is easier to reason about than fifty.
@@ -344,7 +327,7 @@ print("→ You should now see the LangGraph trace as the main expandable run in 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Step 6: Add Manual Instrumentation with `@mlflow.trace`
+# MAGIC ## Step 5: Add Manual Instrumentation with `@mlflow.trace`
 # MAGIC
 # MAGIC Auto-tracing covers the graph. Manual spans help when you want to inspect your
 # MAGIC own helper logic in more detail.
@@ -387,7 +370,7 @@ print(formatted_context[:300] + "...")
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Step 7: Search Recent Traces
+# MAGIC ## Step 6: Search Recent Traces
 # MAGIC
 # MAGIC Once you know what one good run looks like, `search_traces()` lets you inspect
 # MAGIC patterns across recent runs without opening each trace manually.
@@ -427,7 +410,7 @@ for _, row in traces.iterrows():
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Step 8: Production Tracing Patterns
+# MAGIC ## Step 7: Production Tracing Patterns
 # MAGIC
 # MAGIC Once tracing works in a notebook, the production question becomes: "How do I keep
 # MAGIC the signal without creating too much cost or noise?"

@@ -9,7 +9,7 @@
 # MAGIC
 # MAGIC ## Learning Objectives
 # MAGIC - Reuse the same production-style agent structure from the memory section
-# MAGIC - Create an evaluation dataset with expected answers
+# MAGIC - Retrieve and expand the managed evaluation dataset from `00_first_eval_loop.py`
 # MAGIC - Use `predict_fn` to let MLflow handle prediction, tracing, and parallelism
 # MAGIC - Run `mlflow.genai.evaluate()` with built-in scorers first (including `Correctness`)
 # MAGIC - Write code-based scorers with the `@scorer` decorator
@@ -38,6 +38,7 @@
 # MAGIC %pip install -q --upgrade \
 # MAGIC   "databricks-sdk>=0.101,<0.103" \
 # MAGIC   "mlflow[databricks]>=3.10,<3.11" \
+# MAGIC   "databricks-agents" \
 # MAGIC   "databricks-langchain[memory]>=0.17,<0.18" \
 # MAGIC   "databricks-vectorsearch>=0.66,<0.67" \
 # MAGIC   "langgraph>=1.1,<1.2" \
@@ -70,6 +71,7 @@ from langchain_core.tools import tool
 from langgraph.graph import END, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode
 from mlflow.entities import Feedback
+from mlflow.genai.datasets import get_dataset
 from mlflow.genai.judges import make_judge
 from mlflow.genai.scorers import (
     Correctness,
@@ -91,6 +93,7 @@ LAKEBASE_INSTANCE_NAME = None
 LAKEBASE_AUTOSCALING_PROJECT = "knowledge-assistant-state"
 LAKEBASE_AUTOSCALING_BRANCH = "production"
 VECTOR_INDEX = f"{CATALOG}.{SCHEMA}.policy_index"
+EVAL_DATASET_TABLE = f"{CATALOG}.{SCHEMA}.bootcamp_eval_dataset"
 
 EVALUATION_RUN_ID = uuid.uuid4().hex[:8]
 EXPERIMENT_NAME = (
@@ -288,73 +291,86 @@ print(f"  Tools: {[tool.name for tool in all_tools]}")
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Step 4: Create the Evaluation Dataset
+# MAGIC ## Step 4: Retrieve and Expand the Evaluation Dataset
 # MAGIC
-# MAGIC We will evaluate several policy questions at once. Each row contains the input
-# MAGIC plus a reference answer we can use later when custom judges become necessary.
+# MAGIC In `00_first_eval_loop.py` we created a managed evaluation dataset backed by
+# MAGIC Unity Catalog. Here we retrieve it with `get_dataset()` and expand it with
+# MAGIC more questions, `user_id` in `inputs`, and `expected_facts` in `expectations`.
+# MAGIC
+# MAGIC `merge_records()` uses upsert semantics: records with matching `inputs` are
+# MAGIC updated in place, and new `inputs` are added. This means you can re-run this
+# MAGIC notebook safely — it will not create duplicates.
 # MAGIC
 # MAGIC We include both `expected_answer` (a plain string for custom judges) and
 # MAGIC `expected_facts` (a list for the built-in `Correctness` scorer). Keeping both
 # MAGIC formats lets us use built-in and custom scorers on the same dataset.
-# MAGIC
-# MAGIC > **Production note**: for versioned, reusable evaluation datasets, MLflow 3.x
-# MAGIC > provides `mlflow.genai.datasets.create_dataset()` and `get_dataset()`. Inline
-# MAGIC > DataFrames are fine for teaching, but the Datasets API is worth knowing about
-# MAGIC > when your eval set grows.
 
 # COMMAND ----------
 
-eval_data = pd.DataFrame(
-    [
-        {
-            "user_id": "manager-alex",
-            "question": "How much vacation time do full-time employees get?",
+try:
+    eval_dataset = get_dataset(name=EVAL_DATASET_TABLE)
+except Exception as exc:
+    raise RuntimeError(
+        f"Dataset '{EVAL_DATASET_TABLE}' not found. "
+        "Run 00_first_eval_loop.py first to create the managed evaluation dataset."
+    ) from exc
+
+expanded_records = [
+    {
+        "inputs": {"question": "How much vacation time do full-time employees get?", "user_id": "manager-alex"},
+        "expectations": {
             "expected_answer": "Full-time employees accrue 15 days of vacation per year (1.25 days per month).",
             "expected_facts": ["Full-time employees accrue 15 days of vacation per year."],
         },
-        {
-            "user_id": "hybrid-casey",
-            "question": "What are the core in-office days for hybrid workers?",
+    },
+    {
+        "inputs": {"question": "What are the core in-office days for hybrid workers?", "user_id": "hybrid-casey"},
+        "expectations": {
             "expected_answer": "Tuesday and Thursday are designated as the core in-office days.",
             "expected_facts": ["Tuesday and Thursday are core in-office days."],
         },
-        {
-            "user_id": "manager-alex",
-            "question": "What's the annual learning budget for managers?",
+    },
+    {
+        "inputs": {"question": "What's the annual learning budget for managers?", "user_id": "manager-alex"},
+        "expectations": {
             "expected_answer": "Managers receive $2,500 per year for professional development.",
             "expected_facts": ["Managers receive $2,500 per year for professional development."],
         },
-        {
-            "user_id": "hybrid-casey",
-            "question": "Can employees work remotely full-time?",
+    },
+    {
+        "inputs": {"question": "Can employees work remotely full-time?", "user_id": "hybrid-casey"},
+        "expectations": {
             "expected_answer": "No. Hybrid employees must be in the office at least 2 days per week, with Tuesday and Thursday as core days.",
             "expected_facts": ["Hybrid employees must be in the office at least 2 days per week.", "Tuesday and Thursday are core days."],
         },
-        {
-            "user_id": "manager-alex",
-            "question": "Do unused sick days carry over?",
+    },
+    {
+        "inputs": {"question": "Do unused sick days carry over?", "user_id": "manager-alex"},
+        "expectations": {
             "expected_answer": "No, unused sick leave does not carry over to the next year.",
             "expected_facts": ["Unused sick leave does not carry over to the next year."],
         },
-    ]
-)
+    },
+]
 
+eval_dataset.merge_records(expanded_records)
+
+eval_data = eval_dataset.to_df()
 display(eval_data)
+print(f"✓ Dataset retrieved and expanded: {EVAL_DATASET_TABLE}")
+print(f"  Total records: {len(eval_data)}")
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Step 5: Define `predict_fn` and Format Evaluation Records
+# MAGIC ## Step 5: Define `predict_fn`
 # MAGIC
-# MAGIC Instead of generating predictions in a manual loop, we define a `predict_fn`
-# MAGIC that MLflow calls during `mlflow.genai.evaluate()`. This is the idiomatic
-# MAGIC MLflow 3.x pattern because:
+# MAGIC Same pattern from `00_first_eval_loop.py`, but this version accepts `user_id`
+# MAGIC alongside `question` because the expanded dataset includes per-user records.
+# MAGIC The parameter names must match the keys in `inputs` from the dataset.
 # MAGIC
-# MAGIC - traces are automatically linked to evaluation results
-# MAGIC - MLflow handles parallelism (configurable via `MLFLOW_GENAI_EVAL_MAX_WORKERS`)
-# MAGIC - you get a single call that generates, traces, and scores
-# MAGIC
-# MAGIC The `predict_fn` parameter names must match the keys in `inputs`.
+# MAGIC MLflow handles parallelism automatically (configurable via
+# MAGIC `MLFLOW_GENAI_EVAL_MAX_WORKERS`).
 
 # COMMAND ----------
 
@@ -369,21 +385,11 @@ def predict_fn(question: str, user_id: str) -> str:
     return result["messages"][-1].content
 
 
-eval_records = [
-    {
-        "inputs": {"question": row["question"], "user_id": row["user_id"]},
-        "expectations": {
-            "expected_answer": row["expected_answer"],
-            "expected_facts": row["expected_facts"],
-        },
-    }
-    for _, row in eval_data.iterrows()
-]
-
-print("✓ predict_fn defined and eval records formatted")
-print(f"  Total eval records: {len(eval_records)}")
-print(f"  Sample inputs: {eval_records[0]['inputs']}")
-print(f"  Sample expectations keys: {list(eval_records[0]['expectations'].keys())}")
+print("✓ predict_fn defined")
+print(f"  Dataset records to evaluate: {len(eval_data)}")
+sample_row = eval_data.iloc[0]
+print(f"  Sample inputs: {sample_row['inputs']}")
+print(f"  Sample expectations keys: {list(sample_row['expectations'].keys())}")
 
 # COMMAND ----------
 
@@ -478,7 +484,7 @@ print("  • Guidelines(name='response_structure')")
 # COMMAND ----------
 
 built_in_results = mlflow.genai.evaluate(
-    data=eval_records,
+    data=eval_data[["inputs", "expectations"]],
     predict_fn=predict_fn,
     scorers=[
         relevance_scorer,
@@ -566,9 +572,10 @@ if built_in_df is not None:
     for idx in range(len(built_in_df)):
         result_row = built_in_df.iloc[idx]
         agent_answer = str(result_row.get("outputs", ""))
+        ds_row = eval_data.iloc[idx]
         comparison_row = {
-            "question": eval_data.iloc[idx]["question"],
-            "expected_answer": eval_data.iloc[idx]["expected_answer"],
+            "question": ds_row["inputs"]["question"],
+            "expected_answer": ds_row["expectations"]["expected_answer"],
             "agent_answer": agent_answer[:200],
         }
         for column in [
@@ -645,7 +652,7 @@ print("  • policy_completeness")
 # COMMAND ----------
 
 full_results = mlflow.genai.evaluate(
-    data=eval_records,
+    data=eval_data[["inputs", "expectations"]],
     predict_fn=predict_fn,
     scorers=[
         relevance_scorer,
@@ -728,7 +735,7 @@ if results_df is not None:
 # COMMAND ----------
 
 agent_behavior_results = mlflow.genai.evaluate(
-    data=eval_records,
+    data=eval_data[["inputs", "expectations"]],
     predict_fn=predict_fn,
     scorers=[
         ToolCallCorrectness(),
@@ -969,7 +976,7 @@ gates_passed = check_quality_gates(results_df) if results_df is not None else Fa
 
 print("\nCI/CD pattern:")
 print("```python")
-print("results = mlflow.genai.evaluate(data=eval_records, scorers=final_scorers)")
+print("results = mlflow.genai.evaluate(data=eval_data[['inputs', 'expectations']], scorers=final_scorers)")
 print("table_name, results_df = first_results_table(results)")
 print("if not check_quality_gates(results_df):")
 print("    raise Exception('Quality gates failed - block deployment')")
@@ -982,6 +989,7 @@ print("```")
 # MAGIC
 # MAGIC ### What We Built
 # MAGIC - ✅ Reused the same memory-capable bot shape from Module 02
+# MAGIC - ✅ Retrieved and expanded the managed evaluation dataset across notebooks
 # MAGIC - ✅ Used `predict_fn` to let MLflow handle prediction, tracing, and parallelism
 # MAGIC - ✅ Started with built-in scorers including `Correctness` for fact-checking
 # MAGIC - ✅ Wrote code-based scorers with the `@scorer` decorator

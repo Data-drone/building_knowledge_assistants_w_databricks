@@ -10,10 +10,9 @@
 # MAGIC
 # MAGIC ## Learning Objectives
 # MAGIC - Reuse the same production-style bot shape from Module 02
-# MAGIC - Create a small evaluation dataset in MLflow's `inputs` / `outputs` / `expectations` shape
-# MAGIC - Generate answers in a simple loop
-# MAGIC - Run a couple of built-in scorers with `mlflow.genai.evaluate()`
-# MAGIC - See why built-ins are useful, and where they stop being enough
+# MAGIC - Create a **managed evaluation dataset** backed by Unity Catalog
+# MAGIC - Use `predict_fn` + `mlflow.genai.evaluate()` to generate, trace, and score in one call
+# MAGIC - Run a couple of built-in scorers and see where they stop being enough
 # MAGIC
 # MAGIC ## Prerequisites
 # MAGIC - Completed Module 02 (Memory) OR understand memory-capable LangGraph agents
@@ -35,6 +34,7 @@
 # MAGIC %pip install -q --upgrade \
 # MAGIC   "databricks-sdk>=0.101,<0.103" \
 # MAGIC   "mlflow[databricks]>=3.10,<3.11" \
+# MAGIC   "databricks-agents" \
 # MAGIC   "databricks-langchain[memory]>=0.17,<0.18" \
 # MAGIC   "databricks-vectorsearch>=0.66,<0.67" \
 # MAGIC   "langgraph>=1.1,<1.2" \
@@ -56,7 +56,6 @@ import re
 import uuid
 
 import mlflow
-import pandas as pd
 from databricks_langchain import ChatDatabricks, CheckpointSaver, VectorSearchRetrieverTool
 from langchain_core.messages import HumanMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -64,6 +63,7 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 from langgraph.graph import END, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode
+from mlflow.genai.datasets import create_dataset, get_dataset
 from mlflow.genai.scorers import Guidelines, RelevanceToQuery, Safety
 
 # COMMAND ----------
@@ -76,6 +76,7 @@ LAKEBASE_INSTANCE_NAME = None
 LAKEBASE_AUTOSCALING_PROJECT = "knowledge-assistant-state"
 LAKEBASE_AUTOSCALING_BRANCH = "production"
 VECTOR_INDEX = f"{CATALOG}.{SCHEMA}.policy_index"
+EVAL_DATASET_TABLE = f"{CATALOG}.{SCHEMA}.bootcamp_eval_dataset"
 EXPERIMENT_NAME = (
     f"/Users/{dbutils.notebook.entry_point.getDbutils().notebook().getContext().userName().get()}/"
     "agent_bootcamp_evaluation"
@@ -254,104 +255,90 @@ print(f"  Tools: {[tool.name for tool in all_tools]}")
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Step 4: Create a Small MLflow Evaluation Dataset
+# MAGIC ## Step 4: Create a Managed Evaluation Dataset
 # MAGIC
-# MAGIC We keep the first loop small, but we already use the same row shape that
-# MAGIC `mlflow.genai.evaluate()` expects later:
+# MAGIC Instead of keeping evaluation data in a throwaway DataFrame, we use
+# MAGIC `mlflow.genai.datasets.create_dataset()` to store it as a **Unity Catalog
+# MAGIC table**. This gives us:
 # MAGIC
-# MAGIC - `inputs`
-# MAGIC - `outputs`
-# MAGIC - `expectations`
+# MAGIC - **Versioning** — every `merge_records()` call is timestamped with who changed what
+# MAGIC - **Reusability** — notebook `02_evaluation.py` retrieves this same dataset with `get_dataset()`
+# MAGIC - **Lineage** — the MLflow Experiment UI shows which evaluation runs used which dataset
 # MAGIC
-# MAGIC At this stage only `question` and `expected_answer` are known. We will generate
-# MAGIC `outputs` in the next step.
-
-# COMMAND ----------
-
-first_eval_data = pd.DataFrame(
-    [
-        {
-            "question": "How much vacation time do full-time employees get?",
-            "expected_answer": "Full-time employees accrue 15 days of vacation per year.",
-        },
-        {
-            "question": "What are the core in-office days for hybrid workers?",
-            "expected_answer": "Tuesday and Thursday are the core in-office days.",
-        },
-        {
-            "question": "Do unused sick days carry over?",
-            "expected_answer": "No, unused sick leave does not carry over to the next year.",
-        },
-    ]
-)
-
-display(first_eval_data)
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## Step 5: Generate Answers and Format MLflow Eval Rows
-# MAGIC
-# MAGIC We will:
-# MAGIC 1. ask the bot each question
-# MAGIC 2. save the generated answer
-# MAGIC 3. format each example as an MLflow evaluation row
-# MAGIC
-# MAGIC This keeps the notebook lightweight while still introducing the structure we
-# MAGIC will reuse throughout the rest of the module.
-
-# COMMAND ----------
-
-mlflow_eval_rows = []
-first_results = []
-for idx, row in first_eval_data.iterrows():
-    config = {
-        "configurable": {
-            "thread_id": f"first-eval-{FIRST_EVAL_RUN_ID}-{idx:03d}",
-            "user_id": "first-eval-user",
-        }
-    }
-    agent_result = agent.invoke({"messages": [HumanMessage(content=row["question"])]}, config=config)
-    answer = agent_result["messages"][-1].content
-
-    mlflow_eval_rows.append(
-        {
-            "inputs": {"question": row["question"]},
-            "outputs": answer,
-            "expectations": {"expected_answer": row["expected_answer"]},
-        }
-    )
-
-    first_results.append(
-        {
-            "question": row["question"],
-            "expected_answer": row["expected_answer"],
-            "agent_answer": answer,
-        }
-    )
-
-first_results_df = pd.DataFrame(first_results)
-display(pd.DataFrame(mlflow_eval_rows))
-
-print("✓ Generated answers and formatted MLflow evaluation rows")
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## Step 6: Run a Few Basic Built-In Scorers
-# MAGIC
-# MAGIC Built-in scorers are the fastest way to get signal on response quality:
-# MAGIC
-# MAGIC - `RelevanceToQuery()` checks whether the answer stays focused on the user question
-# MAGIC - `Guidelines()` lets us express simple natural-language rules (tone, grounding, etc.)
-# MAGIC - `Safety()` gives a baseline guardrail, even for low-risk HR questions
-# MAGIC
-# MAGIC We keep the scorer set small here. Later, once we inspect a single run with
-# MAGIC traces, we will scale this up.
+# MAGIC The dataset schema matches what `mlflow.genai.evaluate()` expects:
+# MAGIC each record has `inputs` (the question) and `expectations` (the ground truth).
 
 # COMMAND ----------
 
 mlflow.set_experiment(EXPERIMENT_NAME)
+experiment = mlflow.get_experiment_by_name(EXPERIMENT_NAME)
+
+try:
+    eval_dataset = get_dataset(name=EVAL_DATASET_TABLE)
+    print(f"✓ Retrieved existing dataset: {EVAL_DATASET_TABLE}")
+except Exception:
+    eval_dataset = create_dataset(
+        name=EVAL_DATASET_TABLE,
+        experiment_id=[experiment.experiment_id],
+    )
+    print(f"✓ Created new dataset: {EVAL_DATASET_TABLE}")
+
+first_eval_records = [
+    {
+        "inputs": {"question": "How much vacation time do full-time employees get?"},
+        "expectations": {"expected_answer": "Full-time employees accrue 15 days of vacation per year."},
+    },
+    {
+        "inputs": {"question": "What are the core in-office days for hybrid workers?"},
+        "expectations": {"expected_answer": "Tuesday and Thursday are the core in-office days."},
+    },
+    {
+        "inputs": {"question": "Do unused sick days carry over?"},
+        "expectations": {"expected_answer": "No, unused sick leave does not carry over to the next year."},
+    },
+]
+
+eval_dataset.merge_records(first_eval_records)
+
+first_eval_data = eval_dataset.to_df()
+display(first_eval_data)
+print(f"  Dataset records: {len(first_eval_data)}")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Step 5: Define `predict_fn` and Run Built-In Scorers
+# MAGIC
+# MAGIC Instead of generating predictions in a manual loop and then scoring separately,
+# MAGIC we define a `predict_fn` and let `mlflow.genai.evaluate()` handle everything
+# MAGIC in one call:
+# MAGIC
+# MAGIC 1. **Generate** — MLflow calls `predict_fn` once per dataset record
+# MAGIC 2. **Trace** — each call is automatically traced and linked to the evaluation
+# MAGIC 3. **Score** — built-in scorers grade every response
+# MAGIC
+# MAGIC The `predict_fn` parameter names must match the keys in `inputs` from the
+# MAGIC dataset. Our records have `inputs: {"question": ...}`, so the function
+# MAGIC takes `question: str`.
+# MAGIC
+# MAGIC We start with a small scorer set:
+# MAGIC
+# MAGIC - `RelevanceToQuery()` — does the answer stay focused on the question?
+# MAGIC - `Guidelines()` — does it follow our tone and grounding rules?
+# MAGIC - `Safety()` — baseline guardrail, even for low-risk HR questions
+
+# COMMAND ----------
+
+def predict_fn(question: str) -> str:
+    config = {
+        "configurable": {
+            "thread_id": f"first-eval-{FIRST_EVAL_RUN_ID}-{hash(question) % 10000:04d}",
+            "user_id": "first-eval-user",
+        }
+    }
+    result = agent.invoke({"messages": [HumanMessage(content=question)]}, config=config)
+    return result["messages"][-1].content
+
 
 relevance_scorer = RelevanceToQuery()
 safety_scorer = Safety()
@@ -371,18 +358,16 @@ with mlflow.start_run(run_name="first_eval_loop"):
             "catalog": CATALOG,
             "schema": SCHEMA,
             "vector_index": VECTOR_INDEX,
+            "eval_dataset": EVAL_DATASET_TABLE,
             "num_examples": len(first_eval_data),
         }
     )
-    mlflow.log_table(first_eval_data[["question", "expected_answer"]], "first_eval_dataset.json")
-    mlflow.log_table(pd.DataFrame(mlflow_eval_rows), "first_eval_rows.json")
 
     first_eval_results = mlflow.genai.evaluate(
-        data=mlflow_eval_rows,
+        data=first_eval_data[["inputs", "expectations"]],
+        predict_fn=predict_fn,
         scorers=[relevance_scorer, policy_response_guidelines, safety_scorer],
     )
-
-    mlflow.log_metric("num_examples", len(first_eval_data))
 
 print("✓ MLflow evaluation complete")
 if hasattr(first_eval_results, "metrics"):
@@ -398,45 +383,31 @@ if results_table_name:
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Step 7: Why This First Loop Helps, and Why It Stops Helping
+# MAGIC ## What to Notice
 # MAGIC
-# MAGIC This first loop is useful because it already teaches the core evaluation pattern
-# MAGIC in an MLflow-native way:
+# MAGIC With one `evaluate()` call we generated predictions, traced every call, and
+# MAGIC scored the results. That is the core evaluation pattern:
 # MAGIC
-# MAGIC - create a dataset
-# MAGIC - generate answers
-# MAGIC - score each answer
-# MAGIC - inspect the result table
+# MAGIC - **dataset** → `create_dataset()` + `merge_records()`
+# MAGIC - **predict** → `predict_fn` called automatically per record
+# MAGIC - **score** → built-in scorers grade each response
+# MAGIC - **inspect** → results table + traces in the MLflow UI
 # MAGIC
 # MAGIC But built-ins are not the whole story:
 # MAGIC
-# MAGIC - they are great for broad checks like relevance, tone, and safety
-# MAGIC - they do not fully tell us whether the HR policy content is factually correct
-# MAGIC - they do not explain the internal execution of a single run
+# MAGIC - They are great for broad checks like relevance, tone, and safety.
+# MAGIC - They do **not** tell us whether the HR policy content is factually correct.
+# MAGIC - They do **not** explain the internal execution of a single run.
 # MAGIC
 # MAGIC The next notebook solves a different problem: before we rely on scores at scale,
 # MAGIC we should inspect **one** run deeply with traces.
-
-# COMMAND ----------
-
-print("Full first-loop results:")
-display(first_results_df)
-
-print("What to notice:")
-print("  1. The eval rows already match MLflow's expected structure")
-print("  2. Built-in scorers give quick signal with very little setup")
-print("  3. We still do not know why the model behaved the way it did")
-print("  4. We still have not checked domain-specific HR correctness")
-
-# COMMAND ----------
-
-# MAGIC %md
+# MAGIC
 # MAGIC ## Summary
 # MAGIC
 # MAGIC ### What We Built
 # MAGIC - ✅ Reused the same memory-capable bot shape from Module 02
-# MAGIC - ✅ Created a small evaluation dataset
-# MAGIC - ✅ Formatted rows for `mlflow.genai.evaluate()`
+# MAGIC - ✅ Created a managed evaluation dataset backed by Unity Catalog
+# MAGIC - ✅ Used `predict_fn` to generate, trace, and score in one `evaluate()` call
 # MAGIC - ✅ Ran basic built-in scorers
 # MAGIC - ✅ Identified what built-ins can and cannot tell us
 # MAGIC
