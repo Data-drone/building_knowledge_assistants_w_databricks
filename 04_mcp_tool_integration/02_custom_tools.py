@@ -5,12 +5,12 @@
 # MAGIC ## Two Learning Paths
 # MAGIC
 # MAGIC **Path A — Quick Start (30 min):**
-# MAGIC Sections 1, 2, and 5. Covers when to build custom tools, how to write one,
-# MAGIC and how to deploy it as a Databricks App. Skip Sections 3-4.
+# MAGIC Steps 2, 3, and 6. Covers when to build custom tools, how to write one,
+# MAGIC and how to deploy it as a Databricks App. Skip Steps 4-5.
 # MAGIC
 # MAGIC **Path B — Deep Dive (50 min):**
-# MAGIC All sections. Adds MCP server architecture concepts (Section 3) and
-# MAGIC local server testing (Section 4) before production deployment.
+# MAGIC All steps. Adds MCP server architecture concepts (Step 4) and
+# MAGIC local server testing (Step 5) before production deployment.
 # MAGIC
 # MAGIC ## What You'll Build
 # MAGIC - Decide when a custom tool is needed vs managed MCP (Genie, SQL, UC Functions)
@@ -52,7 +52,7 @@ dbutils.library.restartPython()
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Section 1: When to Build Custom Tools (5 min)
+# MAGIC ## Step 2: When to Build Custom Tools (5 min)
 # MAGIC
 # MAGIC ### Use Managed MCPs When:
 # MAGIC - Querying Databricks tables (SQL, Genie)
@@ -88,7 +88,7 @@ dbutils.library.restartPython()
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Section 2: Build a Simple Custom Tool (10 min)
+# MAGIC ## Step 3: Build a Simple Custom Tool (10 min)
 # MAGIC
 # MAGIC Let's build a simple tool that wraps an external weather API.
 
@@ -254,10 +254,10 @@ print("✅ Agent successfully used the custom tool!")
 # MAGIC %md
 # MAGIC ---
 # MAGIC
-# MAGIC ## Quick Start Path: Jump to Section 5
+# MAGIC ## Quick Start Path: Jump to Step 6
 # MAGIC
-# MAGIC If you are following Path A, scroll down to **Section 5: Deploy MCP Server
-# MAGIC to Production** and skip Sections 3-4.
+# MAGIC If you are following Path A, scroll down to **Step 6: Deploy MCP Server
+# MAGIC to Production** and skip Steps 4-5.
 # MAGIC
 # MAGIC For Path B, continue below.
 # MAGIC
@@ -266,11 +266,11 @@ print("✅ Agent successfully used the custom tool!")
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Section 3: MCP Server Concepts (OPTIONAL - 10 min)
+# MAGIC ## Step 4: MCP Server Concepts (OPTIONAL - 10 min)
 # MAGIC
-# MAGIC **⏭️ Skip this section if you want to go straight to production deployment (Section 5).**
+# MAGIC **⏭️ Skip this step if you want to go straight to production deployment (Step 6).**
 # MAGIC
-# MAGIC This section explains MCP server architecture for deeper understanding.
+# MAGIC This step explains MCP server architecture for deeper understanding.
 
 # COMMAND ----------
 
@@ -308,7 +308,7 @@ print("✅ Agent successfully used the custom tool!")
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Section 4: Local MCP Server Testing (OPTIONAL - 10 min)
+# MAGIC ## Step 5: Local MCP Server Testing (OPTIONAL - 10 min)
 # MAGIC
 # MAGIC **⏭️ Skip this section for Quick Start path.**
 # MAGIC
@@ -439,19 +439,19 @@ print("  - power: Raise to a power")
 # MAGIC %md
 # MAGIC ---
 # MAGIC
-# MAGIC ## Section 5: Deploy MCP Server to Production (15 min)
+# MAGIC ## Step 6: Deploy MCP Server to Production (15 min)
 # MAGIC
-# MAGIC ### 🎯 Start Here if You Skipped Sections 3-4
+# MAGIC ### 🎯 Start Here if You Skipped Steps 4-5
 # MAGIC
-# MAGIC This section shows you how to deploy a production-ready MCP server as a Databricks App.
-# MAGIC We'll take the weather tool from Section 2 and deploy it.
+# MAGIC This step shows you how to deploy a production-ready MCP server as a Databricks App.
+# MAGIC We'll take the weather tool from Step 3 and deploy it.
 
 # COMMAND ----------
 
 # MAGIC %md
 # MAGIC ### Architecture: Local Development vs Production
 # MAGIC
-# MAGIC **What you built in Section 2:**
+# MAGIC **What you built in Step 3:**
 # MAGIC ```python
 # MAGIC @tool
 # MAGIC def get_weather(city: str) -> str:
@@ -964,18 +964,18 @@ if hasattr(response, 'tool_calls') and response.tool_calls:
 # MAGIC
 # MAGIC ### What You Learned:
 # MAGIC
-# MAGIC **Core Concepts (Sections 1-2):**
+# MAGIC **Core Concepts (Steps 2-3):**
 # MAGIC - ✅ When to build custom tools vs use managed MCPs
 # MAGIC - ✅ Build simple tools with `@tool` decorator
 # MAGIC - ✅ Add tools to agents
 # MAGIC
-# MAGIC **Production Deployment (Section 5):**
+# MAGIC **Production Deployment (Step 6):**
 # MAGIC - ✅ Create FastMCP server (official Databricks template pattern)
 # MAGIC - ✅ Deploy as Databricks App with uv
 # MAGIC - ✅ Connect using DatabricksMCPClient
 # MAGIC - ✅ Use in production agents
 # MAGIC
-# MAGIC **Optional Deep Dive (Sections 3-4):**
+# MAGIC **Optional Deep Dive (Steps 4-5):**
 # MAGIC - ⚙️ MCP server architecture concepts
 # MAGIC - ⚙️ Local MCP server development and testing
 # MAGIC
