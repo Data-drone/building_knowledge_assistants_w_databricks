@@ -77,6 +77,21 @@ EMPLOYEE_TABLE = f"{UC_NAMESPACE}.employee_data"
 LEAVE_BALANCES_TABLE = f"{UC_NAMESPACE}.leave_balances"
 
 # ==============================================================================
+# APPS DEPLOYMENT CONFIGURATION
+# ==============================================================================
+
+APP_NAME = "knowledge-assistant-agent-app"
+APP_EXPERIMENT = "/Shared/knowledge_assistant_agent_app"
+
+
+def get_app_url(app_name: str) -> str:
+    """Return the base URL for a deployed Databricks App."""
+    w = get_workspace_client()
+    app = w.apps.get(app_name)
+    return f"https://{app.url}"
+
+
+# ==============================================================================
 # MLFLOW CONFIGURATION
 # ==============================================================================
 

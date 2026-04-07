@@ -9,11 +9,11 @@
 # MAGIC
 # MAGIC **Estimated time:** 20-25 minutes
 # MAGIC
-# MAGIC **Where this fits in Module 5:** After `02_apps_deployment.py`. This notebook
+# MAGIC **Where this fits in Module 5:** After `02_deploy_and_validate.py`. This notebook
 # MAGIC covers observability, quality evaluation, and continuous monitoring.
 # MAGIC
 # MAGIC **Prerequisites**
-# MAGIC - Completed `01_apps_dev_loop.py` and `02_apps_deployment.py`
+# MAGIC - Completed `01_packaging_for_apps.py` and `02_deploy_and_validate.py`
 # MAGIC - OAuth token saved in `my-secrets/apps_oauth_token`
 # MAGIC - App experiment exists at `/Shared/knowledge_assistant_agent_app`
 # MAGIC

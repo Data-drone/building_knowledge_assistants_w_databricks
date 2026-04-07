@@ -15,7 +15,7 @@
 # MAGIC **Where this fits in Module 5:** Final notebook. This is the release-ready checklist that combines deployment, validation, and monitoring gates.
 # MAGIC
 # MAGIC ## Prerequisites
-# MAGIC - Completed `01_apps_dev_loop.py` and `02_apps_deployment.py`
+# MAGIC - Completed `01_packaging_for_apps.py` and `02_deploy_and_validate.py`
 # MAGIC - Recommended: completed `03_production_monitoring.py`
 # MAGIC - OAuth token saved in `my-secrets/apps_oauth_token`
 
