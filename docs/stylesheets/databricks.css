@@ -477,6 +477,44 @@
   color: #E8ECF0;
 }
 
+/* ---------- Dark mode: catch-all for body text in cards ---------- */
+[data-md-color-scheme="databricks-dark"] .step-card,
+[data-md-color-scheme="databricks-dark"] .step-card p,
+[data-md-color-scheme="databricks-dark"] .step-card li,
+[data-md-color-scheme="databricks-dark"] .step-card strong {
+  color: #E8ECF0;
+}
+
+[data-md-color-scheme="databricks-dark"] .notebook-card p,
+[data-md-color-scheme="databricks-dark"] .notebook-card li,
+[data-md-color-scheme="databricks-dark"] .notebook-card strong {
+  color: #B0BEC5;
+}
+
+[data-md-color-scheme="databricks-dark"] .setup-card,
+[data-md-color-scheme="databricks-dark"] .setup-card p,
+[data-md-color-scheme="databricks-dark"] .setup-card li {
+  color: #B0BEC5;
+}
+
+[data-md-color-scheme="databricks-dark"] .flow-step,
+[data-md-color-scheme="databricks-dark"] .flow-step strong,
+[data-md-color-scheme="databricks-dark"] .flow-step p {
+  color: #E8ECF0;
+}
+
+[data-md-color-scheme="databricks-dark"] .footer-links {
+  color: #78909C;
+}
+
+[data-md-color-scheme="databricks-dark"] .md-typeset strong {
+  color: #E8ECF0;
+}
+
+[data-md-color-scheme="databricks-dark"] .md-typeset h3 {
+  color: #E8ECF0;
+}
+
 /* ---------- Mermaid diagrams ---------- */
 .mermaid {
   margin: 1.5rem 0;
