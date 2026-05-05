@@ -96,6 +96,16 @@
   color: #E8ECF0;
 }
 
+[data-md-color-scheme="databricks-dark"] .md-typeset {
+  color: #E8ECF0;
+}
+
+[data-md-color-scheme="databricks-dark"] .md-typeset p,
+[data-md-color-scheme="databricks-dark"] .md-typeset li,
+[data-md-color-scheme="databricks-dark"] .md-typeset td {
+  color: #E8ECF0;
+}
+
 /* ---------- Header ---------- */
 .md-header {
   background-color: #1B3139;
