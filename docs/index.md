@@ -1,98 +1,132 @@
+---
+hide:
+  - navigation
+  - toc
+---
+
+<div class="hero" markdown>
+
 # Databricks Agent Bootcamp
-<!-- Built with MkDocs Material -->
 
-<div class="db-hero" markdown>
+Build a production-ready internal Knowledge Assistant using Databricks Apps, Agent Framework, Vector Search, Genie, MLflow, and Lakebase memory.
 
-## Build Production-Ready AI Agents on Databricks
+<div class="hero-ctas" markdown>
 
-A hands-on tutorial series that takes you from zero to a deployed **Internal Knowledge Assistant** — answering questions from documents and structured data, with conversation memory and production monitoring.
-
-**2 hours hands-on** · **6 modules** · **Intermediate level**
-
-[Get Started :material-arrow-right:](getting-started.md){ .md-button .md-button--primary }
-[View on GitHub :material-github:](https://github.com/Data-drone/building_knowledge_assistants_w_databricks){ .md-button }
+[Start the bootcamp](bootcamp.md){ .md-button .md-button--primary }
+[View notebooks](notebooks.md){ .md-button }
+[Open GitHub :material-github:](https://github.com/Data-drone/building_knowledge_assistants_w_databricks){ .md-button }
 
 </div>
 
-## What You'll Build
+<div class="hero-badges" markdown>
 
-An **Internal Knowledge Assistant** that:
+<span class="badge">Intermediate</span>
+<span class="badge">~2 hours</span>
+<span class="badge">Notebook-first</span>
+<span class="badge">Production patterns</span>
 
-- :material-file-search: Answers policy questions from documents (Vector Search)
-- :material-database-search: Queries employee data with natural language (Genie)
-- :material-chat-processing: Maintains conversation context across turns (Lakebase Checkpointer)
-- :material-account-heart: Remembers user preferences across sessions (Lakebase Store)
-- :material-chart-line: Traces all execution for observability (MLflow)
-- :material-check-decagram: Evaluates quality with built-in and custom judges
-- :material-rocket-launch: Deploys to production as a Databricks App
-
-## Learning Path
-
-<div class="module-grid" markdown>
-
-<div class="module-card" markdown>
-<span class="module-num">MODULE 0</span>
-### Foundations <span class="badge-duration">15 min</span>
-Set up Unity Catalog, Lakebase, sample data, and a governed UC function.
-
-[:material-arrow-right: Start here](modules/00-foundations.md)
-</div>
-
-<div class="module-card" markdown>
-<span class="module-num">MODULE 1</span>
-### RAG Pipeline <span class="badge-duration">40 min</span>
-Build your first agent and add document-based Q&A with Vector Search.
-
-[:material-arrow-right: Build RAG](modules/01-rag-pipeline.md)
-</div>
-
-<div class="module-card" markdown>
-<span class="module-num">MODULE 2</span>
-### Memory <span class="badge-duration">50 min</span>
-Add short-term conversation memory and long-term user preferences.
-
-[:material-arrow-right: Add memory](modules/02-memory.md)
-</div>
-
-<div class="module-card" markdown>
-<span class="module-num">MODULE 3</span>
-### Evaluation <span class="badge-duration">75 min</span>
-Observe, trace, and evaluate agent quality with MLflow scorers and judges.
-
-[:material-arrow-right: Evaluate](modules/03-evaluation.md)
-</div>
-
-<div class="module-card" markdown>
-<span class="module-num">MODULE 4</span>
-### Data Tools <span class="badge-duration">75 min</span>
-Add Genie for SQL queries, custom MCP tools, and multi-tool routing.
-
-[:material-arrow-right: Extend](modules/04-data-tools.md)
-</div>
-
-<div class="module-card" markdown>
-<span class="module-num">MODULE 5</span>
-### Deployment <span class="badge-duration">60 min</span>
-Deploy to Databricks Apps with monitoring and quality gates.
-
-[:material-arrow-right: Deploy](modules/05-deployment.md)
 </div>
 
 </div>
 
-## Who Is This For?
+---
 
-**Target audience:** Developers familiar with LangChain/agents but new to Databricks.
+## What you'll build
 
-**Prerequisites:**
+<div class="build-grid" markdown>
 
-- Python programming
-- Basic LangChain/LangGraph concepts
-- Familiarity with agents (ReAct pattern)
+<div class="build-card" markdown>
+### :material-robot-outline: Internal Knowledge Assistant
+An agent that answers employee questions from policy documents and structured data — deployed as a Databricks App with full observability.
+</div>
 
-**Databricks requirements:**
+<div class="build-card" markdown>
+### :material-file-search-outline: Document Q&A via Vector Search
+Answers from unstructured documents using Delta Sync embeddings and `VectorSearchRetrieverTool`.
+</div>
 
-- MLR 17.3 LTS or higher
-- Unity Catalog enabled
-- Lakebase and Genie access
-- Foundation Model endpoints available
+<div class="build-card" markdown>
+### :material-database-search-outline: Structured Data via Genie
+Natural language queries over employee tables and leave balances — Genie converts questions to SQL.
+</div>
+
+<div class="build-card" markdown>
+### :material-head-cog-outline: Lakebase Memory
+Short-term context with CheckpointSaver. Long-term user preferences with DatabricksStore and LLM-managed memory tools.
+</div>
+
+<div class="build-card" markdown>
+### :material-rocket-launch-outline: Databricks Apps Deployment
+Production endpoint with `/invocations` API, built-in chat UI, environment-based config, and OAuth authentication.
+</div>
+
+<div class="build-card" markdown>
+### :material-chart-line: MLflow Observability
+End-to-end tracing, built-in LLM judges, custom scorers, and registered production monitors with configurable sampling.
+</div>
+
+</div>
+
+---
+
+## Bootcamp flow
+
+<div class="flow-sequence" markdown>
+
+<div class="flow-step" markdown>
+<span class="flow-num">01</span>
+**Setup workspace** — Unity Catalog, Lakebase, sample data
+</div>
+
+<div class="flow-step" markdown>
+<span class="flow-num">02</span>
+**Create knowledge sources** — Document chunking, Vector Search index
+</div>
+
+<div class="flow-step" markdown>
+<span class="flow-num">03</span>
+**Build the assistant** — LangGraph agent with RAG tools
+</div>
+
+<div class="flow-step" markdown>
+<span class="flow-num">04</span>
+**Add structured data** — Genie spaces, MCP tools, multi-tool routing
+</div>
+
+<div class="flow-step" markdown>
+<span class="flow-num">05</span>
+**Add memory** — Short-term checkpoints, long-term user preferences
+</div>
+
+<div class="flow-step" markdown>
+<span class="flow-num">06</span>
+**Evaluate with MLflow** — Tracing, scorers, judges, quality gates
+</div>
+
+<div class="flow-step" markdown>
+<span class="flow-num">07</span>
+**Deploy as a Databricks App** — Packaging, validation, monitoring
+</div>
+
+<div class="flow-step" markdown>
+<span class="flow-num">08</span>
+**Debug & operate** — Production monitoring, troubleshooting, iteration
+</div>
+
+</div>
+
+[Start with Step 01 :material-arrow-right:](bootcamp.md){ .md-button .md-button--primary }
+
+---
+
+## Who is this for?
+
+**Developers** familiar with Python and LangChain/LangGraph who want to build production agents on Databricks. You should understand the ReAct pattern and have access to a Databricks workspace with Unity Catalog, Lakebase, and Foundation Model endpoints.
+
+---
+
+<div class="footer-links" markdown>
+
+[:material-github: GitHub](https://github.com/Data-drone/building_knowledge_assistants_w_databricks) · [:material-book-open-variant: Databricks Docs](https://docs.databricks.com/) · [:material-flask: MLflow Docs](https://mlflow.org/docs/latest/)
+
+</div>

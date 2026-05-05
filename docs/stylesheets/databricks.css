@@ -1,46 +1,37 @@
 /* ==========================================================================
-   Databricks Brand Theme for MkDocs Material
+   Databricks Agent Bootcamp — Editorial Theme
 
-   Brand colors sourced from Databricks design system:
-   - Primary Red:    #FF3621
-   - Dark Navy:      #1B3139
-   - White:          #FFFFFF
-   - Light Gray:     #F5F5F5
-   - Accent Orange:  #FF6F61
+   Design: Warm white, charcoal text, Databricks red/orange accents.
+   Spacious, minimal, premium docs feel with soft cards and subtle shadows.
    ========================================================================== */
 
 /* ---------- Light scheme ---------- */
 [data-md-color-scheme="databricks"] {
-  /* Primary & accent */
   --md-primary-fg-color: #1B3139;
   --md-primary-fg-color--light: #2A4A55;
   --md-primary-fg-color--dark: #0F1F24;
   --md-primary-bg-color: #FFFFFF;
-  --md-primary-bg-color--light: #F5F5F5;
+  --md-primary-bg-color--light: #FAFAFA;
 
   --md-accent-fg-color: #FF3621;
-  --md-accent-fg-color--transparent: rgba(255, 54, 33, 0.1);
+  --md-accent-fg-color--transparent: rgba(255, 54, 33, 0.08);
   --md-accent-bg-color: #FFFFFF;
 
-  /* Default text and background */
-  --md-default-fg-color: #1B3139;
-  --md-default-fg-color--light: #4A6670;
-  --md-default-fg-color--lighter: #7A9AA6;
-  --md-default-fg-color--lightest: #B0C4CE;
-  --md-default-bg-color: #FFFFFF;
-  --md-default-bg-color--light: #F9FAFB;
-  --md-default-bg-color--lighter: #F5F5F5;
-  --md-default-bg-color--lightest: #EEEEEE;
+  --md-default-fg-color: #2D3436;
+  --md-default-fg-color--light: #4A5859;
+  --md-default-fg-color--lighter: #7B8C8D;
+  --md-default-fg-color--lightest: #B2BEC3;
+  --md-default-bg-color: #FDFCFB;
+  --md-default-bg-color--light: #F9F7F5;
+  --md-default-bg-color--lighter: #F4F1EF;
+  --md-default-bg-color--lightest: #EDEAE7;
 
-  /* Code */
-  --md-code-bg-color: #F5F7F8;
-  --md-code-fg-color: #1B3139;
-  --md-code-hl-color: rgba(255, 54, 33, 0.1);
+  --md-code-bg-color: #F6F4F2;
+  --md-code-fg-color: #2D3436;
+  --md-code-hl-color: rgba(255, 54, 33, 0.08);
 
-  /* Typeset links */
-  --md-typeset-a-color: #FF3621;
+  --md-typeset-a-color: #E8391B;
 
-  /* Footer */
   --md-footer-fg-color: #FFFFFF;
   --md-footer-fg-color--light: rgba(255, 255, 255, 0.7);
   --md-footer-fg-color--lighter: rgba(255, 255, 255, 0.5);
@@ -57,7 +48,7 @@
   --md-primary-bg-color--light: #E0E0E0;
 
   --md-accent-fg-color: #FF5A47;
-  --md-accent-fg-color--transparent: rgba(255, 90, 71, 0.15);
+  --md-accent-fg-color--transparent: rgba(255, 90, 71, 0.12);
   --md-accent-bg-color: #1B3139;
 
   --md-default-fg-color: #E8ECF0;
@@ -71,7 +62,7 @@
 
   --md-code-bg-color: #132830;
   --md-code-fg-color: #E8ECF0;
-  --md-code-hl-color: rgba(255, 90, 71, 0.15);
+  --md-code-hl-color: rgba(255, 90, 71, 0.12);
 
   --md-typeset-a-color: #FF5A47;
 
@@ -82,84 +73,353 @@
   --md-footer-bg-color--dark: #050C10;
 }
 
-/* ---------- Header bar ---------- */
-.md-header {
-  background-color: #1B3139;
+/* ---------- Global typography ---------- */
+.md-typeset {
+  font-size: 0.85rem;
+  line-height: 1.7;
 }
 
-/* ---------- Navigation tabs ---------- */
+.md-typeset h1 {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #1B3139;
+}
+
+.md-typeset h2 {
+  font-weight: 600;
+  margin-top: 2.5rem;
+  color: #2D3436;
+}
+
+[data-md-color-scheme="databricks-dark"] .md-typeset h1,
+[data-md-color-scheme="databricks-dark"] .md-typeset h2 {
+  color: #E8ECF0;
+}
+
+/* ---------- Header ---------- */
+.md-header {
+  background-color: #1B3139;
+  box-shadow: none;
+}
+
 .md-tabs {
   background-color: #1B3139;
 }
 
-/* ---------- Hero / landing page ---------- */
-.db-hero {
-  background: linear-gradient(135deg, #1B3139 0%, #2A4A55 60%, #FF3621 100%);
-  padding: 4rem 2rem;
-  border-radius: 8px;
-  color: white;
+/* ---------- Content width ---------- */
+.md-content {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+/* ---------- Hero section ---------- */
+.hero {
+  padding: 3rem 0 2rem;
+  border-bottom: 1px solid #EDEAE7;
   margin-bottom: 2rem;
 }
 
-.db-hero h1 {
-  color: white;
-  font-size: 2.5rem;
+.hero h1 {
+  font-size: 2.4rem;
+  font-weight: 700;
+  color: #1B3139;
+  margin-bottom: 0.75rem;
+  letter-spacing: -0.03em;
+}
+
+.hero > p:first-of-type {
+  font-size: 1.15rem;
+  color: #4A5859;
+  max-width: 640px;
+  line-height: 1.6;
+}
+
+[data-md-color-scheme="databricks-dark"] .hero {
+  border-bottom-color: #2A4A55;
+}
+
+[data-md-color-scheme="databricks-dark"] .hero h1 {
+  color: #E8ECF0;
+}
+
+[data-md-color-scheme="databricks-dark"] .hero > p:first-of-type {
+  color: #B0BEC5;
+}
+
+/* ---------- Hero CTAs ---------- */
+.hero-ctas {
+  margin: 1.5rem 0 1rem;
+}
+
+.hero-ctas .md-button {
+  margin-right: 0.5rem;
   margin-bottom: 0.5rem;
 }
 
-.db-hero p {
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 1.2rem;
-  max-width: 600px;
+/* ---------- Badges ---------- */
+.badge, .hero-badges .badge {
+  display: inline-block;
+  background: #F4F1EF;
+  color: #2D3436;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 14px;
+  margin-right: 0.4rem;
+  margin-bottom: 0.4rem;
+  border: 1px solid #EDEAE7;
 }
 
-/* ---------- Module cards ---------- */
-.module-grid {
+[data-md-color-scheme="databricks-dark"] .badge {
+  background: #1B3139;
+  color: #E8ECF0;
+  border-color: #2A4A55;
+}
+
+/* ---------- Build grid (what you'll build) ---------- */
+.build-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 1.5rem;
-  margin: 2rem 0;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.25rem;
+  margin: 1.5rem 0;
 }
 
-.module-card {
-  border: 1px solid #E0E0E0;
+.build-card {
+  background: #FDFCFB;
+  border: 1px solid #EDEAE7;
   border-radius: 8px;
-  padding: 1.5rem;
+  padding: 1.25rem 1.5rem;
   transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
-.module-card:hover {
-  box-shadow: 0 4px 12px rgba(27, 49, 57, 0.15);
-  border-color: #FF3621;
+.build-card:hover {
+  box-shadow: 0 2px 8px rgba(27, 49, 57, 0.08);
+  border-color: #D4CFC9;
 }
 
-.module-card h3 {
+.build-card h3 {
   margin-top: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
   color: #1B3139;
 }
 
-.module-card .module-num {
+.build-card p {
+  font-size: 0.8rem;
+  color: #4A5859;
+  margin-bottom: 0;
+}
+
+[data-md-color-scheme="databricks-dark"] .build-card {
+  background: #132830;
+  border-color: #2A4A55;
+}
+
+[data-md-color-scheme="databricks-dark"] .build-card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  border-color: #3A6070;
+}
+
+[data-md-color-scheme="databricks-dark"] .build-card h3 {
+  color: #E8ECF0;
+}
+
+[data-md-color-scheme="databricks-dark"] .build-card p {
+  color: #B0BEC5;
+}
+
+/* ---------- Flow sequence (bootcamp steps on home) ---------- */
+.flow-sequence {
+  margin: 1.5rem 0;
+}
+
+.flow-step {
+  display: flex;
+  align-items: baseline;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid #F4F1EF;
+}
+
+.flow-step:last-child {
+  border-bottom: none;
+}
+
+.flow-num {
   display: inline-block;
-  background: #FF3621;
-  color: white;
   font-weight: 700;
   font-size: 0.75rem;
-  padding: 2px 8px;
+  color: #FF3621;
+  min-width: 2rem;
+  margin-right: 0.75rem;
+}
+
+[data-md-color-scheme="databricks-dark"] .flow-step {
+  border-bottom-color: #2A4A55;
+}
+
+[data-md-color-scheme="databricks-dark"] .flow-num {
+  color: #FF5A47;
+}
+
+/* ---------- Bootcamp step cards ---------- */
+.bootcamp-steps {
+  margin: 1rem 0;
+}
+
+.step-card {
+  background: #FDFCFB;
+  border: 1px solid #EDEAE7;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 1rem;
+  transition: box-shadow 0.2s ease;
+}
+
+.step-card:hover {
+  box-shadow: 0 2px 8px rgba(27, 49, 57, 0.06);
+}
+
+.step-num {
+  display: inline-block;
+  font-weight: 700;
+  font-size: 0.8rem;
+  color: #FF3621;
+  background: rgba(255, 54, 33, 0.06);
+  padding: 2px 10px;
   border-radius: 4px;
   margin-bottom: 0.5rem;
 }
 
-[data-md-color-scheme="databricks-dark"] .module-card {
+.step-card h3 {
+  margin-top: 0.25rem;
+  font-size: 1rem;
+  color: #1B3139;
+}
+
+[data-md-color-scheme="databricks-dark"] .step-card {
+  background: #132830;
   border-color: #2A4A55;
 }
 
-[data-md-color-scheme="databricks-dark"] .module-card:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-  border-color: #FF5A47;
+[data-md-color-scheme="databricks-dark"] .step-card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
-[data-md-color-scheme="databricks-dark"] .module-card h3 {
+[data-md-color-scheme="databricks-dark"] .step-num {
+  color: #FF5A47;
+  background: rgba(255, 90, 71, 0.1);
+}
+
+[data-md-color-scheme="databricks-dark"] .step-card h3 {
   color: #E8ECF0;
+}
+
+/* ---------- Notebook cards ---------- */
+.notebook-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.notebook-card {
+  background: #FDFCFB;
+  border: 1px solid #EDEAE7;
+  border-radius: 8px;
+  padding: 1.25rem 1.5rem;
+  transition: box-shadow 0.2s ease;
+}
+
+.notebook-card:hover {
+  box-shadow: 0 2px 8px rgba(27, 49, 57, 0.06);
+}
+
+.notebook-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.notebook-tag {
+  display: inline-block;
+  background: #FF3621;
+  color: white;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 3px;
+}
+
+.notebook-card h3 {
+  margin-top: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  font-family: "JetBrains Mono", monospace;
+  color: #1B3139;
+}
+
+.notebook-actions {
+  margin-top: 0.75rem;
+}
+
+.nb-link {
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+
+[data-md-color-scheme="databricks-dark"] .notebook-card {
+  background: #132830;
+  border-color: #2A4A55;
+}
+
+[data-md-color-scheme="databricks-dark"] .notebook-card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+[data-md-color-scheme="databricks-dark"] .notebook-card h3 {
+  color: #E8ECF0;
+}
+
+/* ---------- Setup grid ---------- */
+.setup-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.25rem;
+  margin: 1.5rem 0;
+}
+
+.setup-card {
+  background: #FDFCFB;
+  border: 1px solid #EDEAE7;
+  border-radius: 8px;
+  padding: 1.25rem;
+}
+
+.setup-card h3 {
+  margin-top: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #1B3139;
+}
+
+[data-md-color-scheme="databricks-dark"] .setup-card {
+  background: #132830;
+  border-color: #2A4A55;
+}
+
+[data-md-color-scheme="databricks-dark"] .setup-card h3 {
+  color: #E8ECF0;
+}
+
+/* ---------- Footer links ---------- */
+.footer-links {
+  text-align: center;
+  padding: 2rem 0;
+  color: #7B8C8D;
+  font-size: 0.8rem;
 }
 
 /* ---------- Admonition accents ---------- */
@@ -170,37 +430,54 @@
 
 .md-typeset .tip > .admonition-title,
 .md-typeset .tip > summary {
-  background-color: rgba(255, 54, 33, 0.1);
+  background-color: rgba(255, 54, 33, 0.06);
 }
 
-.md-typeset .admonition.info,
-.md-typeset details.info {
-  border-color: #1B3139;
+.md-typeset .admonition.warning,
+.md-typeset details.warning {
+  border-color: #F39C12;
 }
 
-.md-typeset .info > .admonition-title,
-.md-typeset .info > summary {
-  background-color: rgba(27, 49, 57, 0.1);
+/* ---------- Collapsible questions (troubleshooting) ---------- */
+.md-typeset details {
+  border-radius: 6px;
+  border: 1px solid #EDEAE7;
+  box-shadow: none;
+  margin-bottom: 0.5rem;
 }
 
-/* ---------- Duration badges ---------- */
-.badge-duration {
-  display: inline-block;
-  background: #E8ECF0;
-  color: #1B3139;
-  font-size: 0.75rem;
+.md-typeset details summary {
+  font-weight: 500;
+}
+
+[data-md-color-scheme="databricks-dark"] .md-typeset details {
+  border-color: #2A4A55;
+}
+
+/* ---------- Tables ---------- */
+.md-typeset table:not([class]) {
+  font-size: 0.78rem;
+  border: 1px solid #EDEAE7;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.md-typeset table:not([class]) th {
+  background: #F4F1EF;
   font-weight: 600;
-  padding: 2px 10px;
-  border-radius: 12px;
-  margin-left: 0.5rem;
+  color: #1B3139;
 }
 
-[data-md-color-scheme="databricks-dark"] .badge-duration {
-  background: #2A4A55;
+[data-md-color-scheme="databricks-dark"] .md-typeset table:not([class]) {
+  border-color: #2A4A55;
+}
+
+[data-md-color-scheme="databricks-dark"] .md-typeset table:not([class]) th {
+  background: #1B3139;
   color: #E8ECF0;
 }
 
-/* ---------- Architecture diagram ---------- */
+/* ---------- Mermaid diagrams ---------- */
 .mermaid {
-  margin: 1rem 0;
+  margin: 1.5rem 0;
 }

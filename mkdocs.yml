@@ -1,5 +1,5 @@
 site_name: Databricks Agent Bootcamp
-site_description: Build production-ready AI agents on Databricks — a hands-on tutorial series
+site_description: Build a production-ready internal Knowledge Assistant on Databricks
 site_url: https://data-drone.github.io/building_knowledge_assistants_w_databricks/
 repo_url: https://github.com/Data-drone/building_knowledge_assistants_w_databricks
 repo_name: Data-drone/building_knowledge_assistants_w_databricks
@@ -28,8 +28,6 @@ theme:
   favicon: assets/favicon.svg
   features:
     - navigation.tabs
-    - navigation.sections
-    - navigation.expand
     - navigation.top
     - navigation.footer
     - content.code.copy
@@ -67,19 +65,11 @@ plugins:
 
 nav:
   - Home: index.md
+  - Bootcamp: bootcamp.md
+  - Notebooks: notebooks.md
   - Architecture: architecture.md
-  - Getting Started: getting-started.md
-  - Modules:
-      - "0: Foundations": modules/00-foundations.md
-      - "1: RAG Pipeline": modules/01-rag-pipeline.md
-      - "2: Memory": modules/02-memory.md
-      - "3: Evaluation": modules/03-evaluation.md
-      - "4: Data Tools": modules/04-data-tools.md
-      - "5: Deployment": modules/05-deployment.md
-  - Reference:
-      - Configuration: reference/configuration.md
-      - Tech Stack: reference/tech-stack.md
-      - Troubleshooting: reference/troubleshooting.md
+  - Setup: setup.md
+  - Troubleshooting: troubleshooting.md
 
 extra:
   social:

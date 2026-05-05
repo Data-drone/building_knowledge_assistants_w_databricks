@@ -1,117 +1,119 @@
 # Architecture
 
-## System Overview
+The Knowledge Assistant is a LangGraph agent with multiple tool backends, all governed through Unity Catalog.
 
-The bootcamp builds a three-layer system: an **agent layer** for orchestration, a **data layer** for retrieval and queries, and an **observability layer** for tracing and evaluation.
+---
+
+## System diagram
 
 ```mermaid
-graph TB
-    subgraph "Observability Layer"
-        MLflow["MLflow 3.0<br/>Tracing → Evaluation → Judges"]
+graph LR
+    User([User]) --> App[Databricks App]
+
+    subgraph Agent["Agent / Orchestrator"]
+        LG[LangGraph StateGraph]
+        LLM[Claude Sonnet 4.6<br/>via Mosaic AI Gateway]
     end
 
-    subgraph "Agent Layer"
-        Agent["ResponsesAgent<br/>LangGraph"]
-        LLM["Mosaic AI Gateway<br/>Claude Sonnet 4.6"]
-        Tools["MCP Tools"]
-        Memory["Lakebase<br/>Checkpointer + Store"]
+    App --> Agent
+
+    subgraph Tools["Tool Backends"]
+        VS[Vector Search<br/>Documents]
+        Genie[Genie<br/>Structured Data]
+        UC[UC Functions<br/>Custom Tools]
     end
 
-    subgraph "Data Layer"
-        VS["Vector Search<br/>Document Chunks"]
-        Genie["Genie<br/>Employee Data"]
-        UC["UC Functions<br/>Custom Tools"]
+    subgraph State["State & Memory"]
+        CP[Lakebase<br/>CheckpointSaver]
+        Store[Lakebase<br/>DatabricksStore]
     end
 
-    User -->|Query| Agent
-    Agent --> LLM
+    subgraph Observe["Observability"]
+        MLflow[MLflow<br/>Traces + Evaluation]
+    end
+
     Agent --> Tools
-    Tools --> VS
-    Tools --> Genie
-    Tools --> UC
-    Agent --> Memory
-    Agent --> MLflow
+    Agent --> State
+    Agent --> Observe
 
-    style Agent fill:#4a9eff
-    style MLflow fill:#ff6b6b
-    style Memory fill:#51cf66
+    subgraph Govern["Governance"]
+        UCat[Unity Catalog]
+    end
+
+    Tools --> Govern
 ```
 
-## Agent Layer
+---
 
-### LangGraph StateGraph
+## How the agent works
 
-The agent uses LangGraph's `StateGraph` with `MessagesState` for the conversation loop:
+1. User sends a message to the Databricks App endpoint
+2. The app loads conversation state from CheckpointSaver (short-term memory)
+3. The LLM decides which tools to call based on the question
+4. Tool results flow back through the LLM for synthesis
+5. The response is returned and state is checkpointed
+6. MLflow traces the entire execution
 
-1. User sends a message
-2. LLM decides whether to call a tool or respond directly
-3. If a tool is needed, the `ToolNode` executes it
-4. The LLM processes tool output and responds (or calls another tool)
+---
 
-This is the standard ReAct pattern, implemented with LangGraph's conditional edges.
+## Tool routing
 
-### MCP Tools
+The agent uses the ReAct pattern — the LLM decides which tool to use on each turn:
 
-All data access goes through Databricks MCP (Model Context Protocol) servers. This means Unity Catalog permissions flow through automatically — no separate authorization needed.
-
-| MCP Server | Purpose | Underlying Service |
+| Question type | Tool used | Example |
 |---|---|---|
-| Vector Search MCP | Document similarity search | Databricks Vector Search |
-| Genie MCP | Natural language to SQL | Genie Spaces |
-| UC Functions MCP | Execute governed functions | Unity Catalog Functions |
+| Policy / document question | Vector Search MCP | "What's our remote work policy?" |
+| Data / metrics question | Genie MCP | "How many days of leave does Alice have?" |
+| Lookup by ID | UC Functions MCP | "Get employee details for E1234" |
+| Memory recall | `get_user_memory` | "What's my preferred name?" |
+| General conversation | No tool (direct LLM) | "Thanks, that's helpful" |
 
-### Memory
+---
 
-Memory lives in Lakebase (managed PostgreSQL):
+## Memory architecture
 
-- **CheckpointSaver** — short-term memory scoped to a `thread_id` (one conversation)
-- **DatabricksStore** — long-term memory scoped to a `user_id` (cross-session facts and preferences)
+| Type | Backend | Scope | Key | Lifetime |
+|---|---|---|---|---|
+| Short-term | Lakebase CheckpointSaver | One conversation | `thread_id` | Minutes to hours |
+| Long-term | Lakebase DatabricksStore | Cross-session | `user_id` | Days to years |
 
-The agent manages long-term memory through three tools: `get_user_memory`, `save_user_memory`, and `delete_user_memory`.
+Long-term memory is managed by three tools the agent calls autonomously:
 
-## Data Layer
+- `get_user_memory` — semantic search over stored facts
+- `save_user_memory` — persist a new fact
+- `delete_user_memory` — remove a fact (GDPR)
 
-### Vector Search (Documents)
+---
 
-Documents are chunked and stored in a Delta table, then synced to a Vector Search index via Delta Sync. The agent uses `VectorSearchRetrieverTool` for similarity search.
+## MCP integration
 
-### Genie (Structured Data)
+All tool access goes through Databricks MCP servers. Unity Catalog permissions flow through automatically.
 
-Genie converts natural language to SQL. You create a Genie Space pointing at your tables, and the agent queries it through the Genie MCP server.
+```
+{HOST}/api/2.0/mcp/vector-search/{CATALOG}/{SCHEMA}
+{HOST}/api/2.0/mcp/genie/{GENIE_SPACE_ID}
+{HOST}/api/2.0/mcp/functions/{CATALOG}/{SCHEMA}
+```
 
-### UC Functions (Custom Tools)
+---
 
-Unity Catalog functions wrap custom Python logic as governed tools. The agent calls them through the UC Functions MCP server.
+## Deployment topology
 
-## Observability Layer
+```
+apps/knowledge_assistant_agent/
+├── app.yaml                    # Env vars, runtime config
+├── requirements.txt            # Python deps
+├── static/index.html           # Chat UI
+└── agent_server/
+    ├── agent.py                # @invoke / @stream handlers
+    ├── langgraph_agent.py      # KnowledgeAssistant class
+    ├── start_server.py         # AgentServer bootstrap
+    └── utils_memory.py         # Memory helpers
+```
 
-### MLflow Tracing
-
-Every agent invocation produces a trace with spans for:
-
-- LLM calls (inputs, outputs, token counts)
-- Tool calls (arguments, results, latency)
-- Memory operations
-- End-to-end timing
-
-### Evaluation
-
-Three types of scorers assess agent quality:
-
-| Type | Example | Cost |
-|---|---|---|
-| Built-in LLM judge | `Safety()`, `Correctness()`, `Guidelines()` | LLM call per trace |
-| Custom LLM judge | `make_judge(name=..., instructions=...)` | LLM call per trace |
-| Code-based scorer | `@scorer` decorated function | Free (Python only) |
-
-Scorers can run in batch during development or continuously in production via registered scorers with configurable sampling rates.
-
-## Deployment
-
-The agent deploys as a **Databricks App** with:
-
-- `databricks sync` to push source code to workspace files
-- `databricks apps deploy` to launch the app
-- `/invocations` endpoint for API access
-- Built-in chat UI at `GET /`
-- MLflow traces written to a shared experiment for monitoring
+Deploy with:
+```bash
+databricks sync "apps/knowledge_assistant_agent" "/Users/$USER/app"
+databricks apps deploy knowledge-assistant-agent-app \
+  --source-code-path "/Workspace/Users/$USER/app"
+```
