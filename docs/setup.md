@@ -78,12 +78,30 @@ See the full config reference in [`config.py`](https://github.com/Data-drone/bui
 
 ---
 
-## Clone and start
+## Import notebooks into your workspace
 
-```bash
-git clone https://github.com/Data-drone/building_knowledge_assistants_w_databricks.git
-cd building_knowledge_assistants_w_databricks
-```
+The fastest way to get started is to add the repo directly in your Databricks workspace:
+
+1. Go to **Workspace → Repos → Add Repo**
+2. Paste the repo URL:
+   ```
+   https://github.com/Data-drone/building_knowledge_assistants_w_databricks.git
+   ```
+3. Click **Create Repo**
+
+All `.py` files are recognized as runnable notebooks automatically. No local clone needed.
+
+!!! tip "Alternative: local clone"
+    If you prefer working locally:
+    ```bash
+    git clone https://github.com/Data-drone/building_knowledge_assistants_w_databricks.git
+    cd building_knowledge_assistants_w_databricks
+    ```
+    Then use `databricks workspace import-dir` or `databricks sync` to push notebooks to your workspace.
+
+---
+
+## Configure and run
 
 Edit `config.py` with your workspace values, then open `00_foundations/00_setup.py` in Databricks and run all cells.
 

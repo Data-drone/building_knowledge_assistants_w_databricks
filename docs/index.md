@@ -119,6 +119,16 @@ End-to-end tracing, built-in LLM judges, custom scorers, and registered producti
 
 ---
 
+## Quick start
+
+Add the repo directly to your Databricks workspace — no local clone needed:
+
+**Workspace → Repos → Add Repo** → paste `https://github.com/Data-drone/building_knowledge_assistants_w_databricks.git`
+
+All notebooks are runnable immediately. See [Setup](setup.md) for full instructions.
+
+---
+
 ## Who is this for?
 
 **Developers** familiar with Python and LangChain/LangGraph who want to build production agents on Databricks. You should understand the ReAct pattern and have access to a Databricks workspace with Unity Catalog, Lakebase, and Foundation Model endpoints.
