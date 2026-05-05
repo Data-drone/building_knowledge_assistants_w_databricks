@@ -16,3 +16,6 @@ venv/
 
 # Notebook checkpoints
 .ipynb_checkpoints/
+
+# MkDocs build output
+site/

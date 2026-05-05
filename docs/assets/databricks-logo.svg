@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 32" fill="none">
+  <!-- Databricks-inspired geometric logo mark -->
+  <g transform="translate(0, 2)">
+    <!-- Diamond shape -->
+    <path d="M14 0 L28 14 L14 28 L0 14 Z" fill="#FF3621"/>
+    <path d="M14 4 L24 14 L14 24 L4 14 Z" fill="white" fill-opacity="0.3"/>
+    <path d="M14 8 L20 14 L14 20 L8 14 Z" fill="white" fill-opacity="0.5"/>
+  </g>
+  <!-- Text -->
+  <text x="36" y="22" font-family="DM Sans, Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="white">
+    Agent Bootcamp
+  </text>
+</svg>
