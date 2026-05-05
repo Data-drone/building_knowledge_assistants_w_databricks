@@ -1,4 +1,5 @@
 # Databricks Agent Bootcamp
+<!-- Built with MkDocs Material -->
 
 <div class="db-hero" markdown>
 
